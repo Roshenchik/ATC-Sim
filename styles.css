@@ -71,17 +71,3 @@ button[data-action] {
 button[data-action]:hover {
   filter: brightness(1.15);
 }
-
-/* Make the page and canvas background explicit so the UI matches CodePen's dark theme
-   even if the script runs before layout or if the browser caches things. These rules are
-   intentionally non-invasive and won't change JS behavior. */
-html, body {
-  background: var(--bg-color) !important;
-}
-
-/* Ensure canvas visually fills the space next to the sidebar so you don't see white gaps */
-.game-canvas {
-  width: calc(100vw - 260px) !important;
-  height: 100vh !important;
-  background: var(--bg-color) !important;
-}

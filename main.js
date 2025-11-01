@@ -118,13 +118,17 @@ class Plane {
   }
   
   update() {
-    if (this.landing) {
+        if (this.landing) {
       // движение к середине полосы
       const targetX = runway.x + runway.width/2;
       const targetY = runway.y + runway.height/2;
       const dx = targetX - this.x;
       const dy = targetY - this.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
+
+      // пересчитываем угол для вектора
+      this.angle = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
+
       if (dist > 1) {
         this.x += (dx / dist) * this.speed;
         this.y += (dy / dist) * this.speed;
