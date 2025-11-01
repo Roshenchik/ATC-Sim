@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ATC Sim</title>
+
+    <!-- main stylesheet (same folder as index.html) -->
+    <link rel="stylesheet" href="styles.css" />
+
+    <!-- preload the module for faster startup -->
+    <link rel="modulepreload" href="main.js" />
+</head>
+<body>
+    <div class="game-container">
+        <canvas class="game-canvas" data-element="canvas"></canvas>
+
+        <aside class="sidebar">
+            <h2>Авиадиспетчер</h2>
+
+            <div class="plane-info" data-element="plane-info">
+                <p>Выберите самолёт</p>
+            </div>
+
+ 
+            <div class="controls">
+                <input
+                    type="number"
+                    min="0"
+                    max="359"
+                    placeholder="Курс (°)"
+                    data-element="course-input"
+                />
+                <button data-action="set-course">Задать курс</button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- application script as an ES module -->
+    <script type="module" src="./main.js"></script>
+</body>
+</html>

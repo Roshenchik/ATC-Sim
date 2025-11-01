@@ -1,0 +1,87 @@
+:root {
+  --bg-color: #001;
+  --runway-color: #555;
+  --text-color: #eee;
+  --accent-color: #f90;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: system-ui, sans-serif;
+}
+
+.game-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.game-canvas {
+  flex: 1;
+  display: block;
+  background: var(--bg-color);
+}
+
+.sidebar {
+  width: 260px;
+  background: rgba(20, 20, 30, 0.95);
+  padding: 1rem;
+  box-sizing: border-box;
+  border-left: 2px solid #333;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.sidebar h2 {
+  margin-top: 0;
+  font-size: 1.3rem;
+  color: var(--accent-color);
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+[data-element="course-input"] {
+  padding: 0.6rem;
+  border: 1px solid #444;
+  background: #111;
+  color: var(--text-color);
+  border-radius: 4px;
+}
+
+button[data-action] {
+  background: var(--accent-color);
+  border: none;
+  color: #000;
+  padding: 0.6rem;
+  font-weight: bold;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: 0.2s;
+}
+
+button[data-action]:hover {
+  filter: brightness(1.15);
+}
+
+/* Make the page and canvas background explicit so the UI matches CodePen's dark theme
+   even if the script runs before layout or if the browser caches things. These rules are
+   intentionally non-invasive and won't change JS behavior. */
+html, body {
+  background: var(--bg-color) !important;
+}
+
+/* Ensure canvas visually fills the space next to the sidebar so you don't see white gaps */
+.game-canvas {
+  width: calc(100vw - 260px) !important;
+  height: 100vh !important;
+  background: var(--bg-color) !important;
+}
