@@ -8,9 +8,9 @@ const FINAL_LENGTH = 100;
 const FINAL_BUFFER = 5; // допустимая зона в файнале для начала захода
 const PLANE_SIZE = 7;
 const VECTOR_LENGTH = 30;
-const PLANE_SPEED = 0.07;
+const PLANE_SPEED = 0.01;
 const SELECT_RADIUS = Math.sqrt(PLANE_SIZE ** 2.5 + PLANE_SIZE ** 2.5);
-const RADAR_UPLOAD = 1000;
+const RADAR_UPLOAD = 6000;
 const STCA_RADIUS = 50;
 const MAX_PLANES = 8;
 const OFFSCREEN_MARGIN = 50; // расстояние за пределами canvas, после которого самолет удаляется
@@ -29,23 +29,26 @@ let selectedPlane = null;
 // =====================
 // ====== ПОЛОСА ======
 const runway = { x: 0, y: 0, width: RUNWAY_WIDTH, height: RUNWAY_HEIGHT };
+// зона финала перед полосой
+const finalZone = { x1: 0, y1: 0, x2: 0, y2: 0 };
+
+// фиксируем положение полосы в центре экрана при старте
+function initRunway() {
+  runway.x = (window.innerWidth - SIDEBAR_WIDTH) / 2 - RUNWAY_WIDTH / 2;
+  runway.y = window.innerHeight / 2 - RUNWAY_HEIGHT / 2;
+
+  // пересчитываем финальную зону один раз
+  finalZone.x1 = runway.x - FINAL_LENGTH;
+  finalZone.y1 = runway.y - FINAL_BUFFER;
+  finalZone.x2 = runway.x;
+  finalZone.y2 = runway.y + RUNWAY_HEIGHT + FINAL_BUFFER;
+}
 
 const resizeCanvas = () => {
   ui.canvas.width = window.innerWidth - SIDEBAR_WIDTH;
   ui.canvas.height = window.innerHeight;
-  runway.x = ui.canvas.width / 2 - RUNWAY_WIDTH / 2;
-  runway.y = ui.canvas.height / 2 - RUNWAY_HEIGHT / 2;
 };
 window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
-
-// зона финала перед полосой
-const finalZone = {
-  x1: runway.x - FINAL_LENGTH,
-  y1: runway.y - FINAL_BUFFER,
-  x2: runway.x,
-  y2: runway.y + RUNWAY_HEIGHT + FINAL_BUFFER
-};
 
 // =====================
 // ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======
@@ -118,7 +121,7 @@ class Plane {
   }
   
   update() {
-        if (this.landing) {
+    if (this.landing) {
       // движение к середине полосы
       const targetX = runway.x + runway.width/2;
       const targetY = runway.y + runway.height/2;
@@ -129,10 +132,12 @@ class Plane {
       // пересчитываем угол для вектора
       this.angle = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
 
-      if (dist > 1) {
+      if (dist > this.speed) {
         this.x += (dx / dist) * this.speed;
         this.y += (dy / dist) * this.speed;
       } else {
+        this.x = targetX;
+        this.y = targetY;
         this.landed = true;
       }
     } else {
@@ -190,16 +195,21 @@ function spawnPlane() {
 // ====== СОБЫТИЯ ======
 ui.canvas.addEventListener('click', e => {
   const rect = ui.canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
+
+  // convert from CSS pixels to canvas pixels
+  const scaleX = ui.canvas.width / rect.width;
+  const scaleY = ui.canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
 
   selectedPlane = null;
   planes.forEach(p => p.selected = false);
 
+  const radiusSq = SELECT_RADIUS * SELECT_RADIUS; // ensure SELECT_RADIUS is in canvas pixels
   for (const p of planes) {
     const dx = mx - p.displayX;
     const dy = my - p.displayY;
-    if (Math.sqrt(dx * dx + dy * dy) < SELECT_RADIUS) {
+    if (dx * dx + dy * dy < radiusSq) {
       p.selected = true;
       selectedPlane = p;
       updatePlaneInfo(p);
@@ -280,6 +290,7 @@ function gameLoop() {
 // =====================
 // ====== ЗАПУСК ======
 resizeCanvas();
+initRunway();
 for (let i = 0; i < MAX_PLANES; i++) spawnPlane();
 setInterval(spawnPlane, 2500);
 refreshDisplay();
