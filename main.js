@@ -8,9 +8,9 @@ const FINAL_LENGTH = 100;
 const FINAL_BUFFER = 5; // допустимая зона в файнале для начала захода
 const PLANE_SIZE = 7;
 const VECTOR_LENGTH = 30;
-const PLANE_SPEED = 0.01;
+const PLANE_SPEED = 0.1;
 const SELECT_RADIUS = Math.sqrt(PLANE_SIZE ** 2.5 + PLANE_SIZE ** 2.5);
-const RADAR_UPLOAD = 6000;
+const RADAR_UPLOAD = 1000;
 const STCA_RADIUS = 50;
 const MAX_PLANES = 8;
 const OFFSCREEN_MARGIN = 50; // расстояние за пределами canvas, после которого самолет удаляется
@@ -22,6 +22,14 @@ const ui = {
   canvas: document.querySelector('[data-element="canvas"]'),
   planeInfo: document.querySelector('[data-element="plane-info"]'),
   courseInput: document.querySelector('[data-element="course-input"]'),
+
+  
+  get radar() {
+    const centerX = runway.x + runway.width / 2;
+    const centerY = runway.y + runway.height / 2;
+    const maxRadius = Math.min(this.canvas.width, this.canvas.height) / 2;
+    return { centerX, centerY, maxRadius };
+  }
 };
 const ctx = ui.canvas.getContext('2d');
 let selectedPlane = null;
@@ -42,6 +50,39 @@ function initRunway() {
   finalZone.y1 = runway.y - FINAL_BUFFER;
   finalZone.x2 = runway.x;
   finalZone.y2 = runway.y + RUNWAY_HEIGHT + FINAL_BUFFER;
+}
+// =====================
+// ====== РИСОВАНИЕ СЕТКИ ======
+// =====================
+
+function drawRadarGrid() {
+  const { centerX, centerY, maxRadius } = ui.radar;
+  const ringStep = 100; // шаг дальности в пикселях
+  const angleStep = 15; // шаг азимута в градусах
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+
+  // --- Концентрические круги ---
+  for (let r = ringStep; r < maxRadius; r += ringStep) {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // --- Радиальные линии ---
+  for (let a = 0; a < 360; a += angleStep) {
+    const rad = (a * Math.PI) / 180;
+    const x2 = centerX + Math.cos(rad) * maxRadius;
+    const y2 = centerY + Math.sin(rad) * maxRadius;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
 }
 
 const resizeCanvas = () => {
@@ -118,6 +159,19 @@ class Plane {
     this.stca = false;
     this.landing = false; // заход на полосу
     this.landed = false;  // завершение посадки
+
+    // ---- формуляр ----
+    this.callsign = this.generateCallsign();
+    this.altitude = 10000 + Math.floor(Math.random() * 20000); // футы
+    this.groundSpeed = 250 + Math.floor(Math.random() * 150); // узлы
+
+  }
+
+  generateCallsign() {
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const airline = ["SAS", "DLH", "BAW", "AFL", "RYR", "KLM"][Math.floor(Math.random() * 6)];
+    const num = Math.floor(100 + Math.random() * 900);
+    return airline + num;
   }
   
   update() {
@@ -161,7 +215,50 @@ class Plane {
 
   draw() {
     drawPlane(ctx, this.displayX, this.displayY, this.angle, this.selected, this.stca);
+    this.drawLabel();
   }
+
+  drawLabel() {
+    const offsetX = 15;
+    const offsetY = -10;
+
+    const textX = this.displayX + offsetX;
+    const textY = this.displayY + offsetY;
+
+    ctx.save();
+    ctx.font = '10px monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = this.selected ? '#0f0' : '#fff';
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 3;
+
+    const lines = [
+      `${this.callsign}`,
+      `HDG ${this.angle.toFixed(0).padStart(3,'0')}`,
+      `SPD ${this.groundSpeed}`,
+      `ALT ${this.altitude}`
+    ];
+
+    let maxWidth = 0;
+    lines.forEach(line => maxWidth = Math.max(maxWidth, ctx.measureText(line).width));
+
+    const boxWidth = maxWidth + 8;
+    const boxHeight = lines.length * 12 + 4;
+
+    // Подложка
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(textX - 4, textY - 2, boxWidth, boxHeight);
+
+    // Текст
+    ctx.fillStyle = this.selected ? '#0f0' : '#fff';
+    lines.forEach((line, i) => {
+      const y = textY + i * 12;
+      ctx.fillText(line, textX, y);
+    });
+
+    ctx.restore();
+  }
+
 
   checkRunway() {
     return this.x > runway.x &&
@@ -178,17 +275,18 @@ const planes = [];
 function spawnPlane() {
   if (planes.length >= MAX_PLANES) return;
 
-  const side = Math.floor(Math.random() * 4);
-  let x, y, angle;
+  const { centerX, centerY, maxRadius } = ui.radar;
+  const spawnRadius = maxRadius + OFFSCREEN_MARGIN;
+  const angle = Math.random() * 360;
 
-  switch (side) {
-    case 0: x = Math.random() * ui.canvas.width; y = -10; angle = 180 + (Math.random() * 60 - 30); break;
-    case 1: x = Math.random() * ui.canvas.width; y = ui.canvas.height + 10; angle = 0 + (Math.random() * 60 - 30); break;
-    case 2: x = -10; y = Math.random() * ui.canvas.height; angle = 90 + (Math.random() * 60 - 30); break;
-    case 3: x = ui.canvas.width + 10; y = Math.random() * ui.canvas.height; angle = 270 + (Math.random() * 60 - 30); break;
-  }
+  const rad = (angle * Math.PI) / 180;
+  const x = centerX + Math.cos(rad) * spawnRadius;
+  const y = centerY + Math.sin(rad) * spawnRadius;
 
-  planes.push(new Plane(x, y, angle));
+  const courseToCenter = (Math.atan2(centerY - y, centerX - x) * 180 / Math.PI + 90 + 360) % 360;
+  const angleWithNoise = courseToCenter + (Math.random() * 30 - 15);
+
+  planes.push(new Plane(x, y, angleWithNoise));
 }
 
 // =====================
@@ -260,6 +358,7 @@ function drawRunway() {
 // ====== ИГРОВОЙ ЦИКЛ ======
 function gameLoop() {
   ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
+  drawRadarGrid();
   drawRunway();
 
   for (let i=planes.length-1; i>=0; i--) {
@@ -275,13 +374,15 @@ function gameLoop() {
     }
 
     // удаление за экран
-    if (p.x<-OFFSCREEN_MARGIN || p.x>ui.canvas.width+OFFSCREEN_MARGIN || p.y<-OFFSCREEN_MARGIN || p.y>ui.canvas.height+OFFSCREEN_MARGIN) {
-      if (selectedPlane === p) { selectedPlane=null; updatePlaneInfo(null); }
-      planes.splice(i,1);
+    const dx = p.x - ui.radar.centerX;
+    const dy = p.y - ui.radar.centerY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > ui.radar.maxRadius + OFFSCREEN_MARGIN + 20) {
+      if (selectedPlane === p) { selectedPlane = null; updatePlaneInfo(null); }
+      planes.splice(i, 1);
       spawnPlane();
     }
   }
-
   planes.forEach(p => p.draw());
 
   requestAnimationFrame(gameLoop);
