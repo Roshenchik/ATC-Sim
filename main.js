@@ -1,20 +1,41 @@
 // =====================
 // ====== КОНСТАНТЫ ======
 // =====================
+
+// ==== РЕАЛЬНЫЕ РАЗМЕРЫ (в метрах) ====
+const RUNWAY_LENGTH_M = 3000;       // длина ВПП (типичная для международного аэропорта)
+const RUNWAY_WIDTH_M = 60;          // ширина ВПП
+const FINAL_LENGTH_M = 10000;        // длина участка финала
+const FINAL_BUFFER_M = 100;          // допустимая зона в финале
+const STCA_RADIUS_M = 10000;          // радиус конфликтной зоны (10 км)
+const OFFSCREEN_MARGIN_M = 10000;   // запас за радиусом радара (10 км)
+const RADAR_RADIUS_M = 20000;       // радиус радара (20 км) // пока не используется напрямую
+const VECTOR_LENGTH_M = 3000;       // длина вектора направления (3 км)
+const PLANE_SPEED_KPH = 833; // для информации в формуляре
+const PLANE_SPEED_MPS = PLANE_SPEED_KPH / 3.6; // скорость самолёта (м/с ≈ 238 км/ч)
+
+// ==== ВИЗУАЛЬНЫЙ МАСШТАБ ====
+const RUNWAY_LENGTH_PX = 30; // длина полосы в пикселях — базовый визуальный размер
+
+// ==== ПЕРЕВОД В ПИКСЕЛИ ====
+const METERS_PER_PIXEL = RUNWAY_LENGTH_M / RUNWAY_LENGTH_PX; // сколько метров в 1 пикселе
+
+const RUNWAY_LENGTH = RUNWAY_LENGTH_PX;
+const RUNWAY_HEIGHT = (RUNWAY_WIDTH_M / METERS_PER_PIXEL) + 3; // +3 пикселя для видимости
+const FINAL_LENGTH = FINAL_LENGTH_M / METERS_PER_PIXEL;
+const FINAL_BUFFER = FINAL_BUFFER_M / METERS_PER_PIXEL;
+const STCA_RADIUS = STCA_RADIUS_M / METERS_PER_PIXEL;
+const OFFSCREEN_MARGIN = OFFSCREEN_MARGIN_M / METERS_PER_PIXEL;
+const RADAR_RADIUS = RADAR_RADIUS_M / METERS_PER_PIXEL;
+const VECTOR_LENGTH = VECTOR_LENGTH_M / METERS_PER_PIXEL;
+const PLANE_SPEED = PLANE_SPEED_MPS / METERS_PER_PIXEL; // в пикселях за кадр
+
+// ==== ПРОЧЕЕ ====
 const SIDEBAR_WIDTH = 260;
-const RUNWAY_WIDTH = 60; 
-const RUNWAY_HEIGHT = 7;
-const FINAL_LENGTH = 100; 
-const FINAL_BUFFER = 5; // допустимая зона в файнале для начала захода
-const PLANE_SIZE = 7;
-const VECTOR_LENGTH = 30;
-const PLANE_SPEED = 0.1;
+const PLANE_SIZE = 4;
 const SELECT_RADIUS = Math.sqrt(PLANE_SIZE ** 2.5 + PLANE_SIZE ** 2.5);
 const RADAR_UPLOAD = 1000;
-const STCA_RADIUS = 50;
 const MAX_PLANES = 8;
-const OFFSCREEN_MARGIN = 50; // расстояние за пределами canvas, после которого самолет удаляется
-
 
 // =====================
 // ====== DOM ЭЛЕМЕНТЫ ======
@@ -36,13 +57,13 @@ let selectedPlane = null;
 
 // =====================
 // ====== ПОЛОСА ======
-const runway = { x: 0, y: 0, width: RUNWAY_WIDTH, height: RUNWAY_HEIGHT };
+const runway = { x: 0, y: 0, width: RUNWAY_LENGTH, height: RUNWAY_HEIGHT };
 // зона финала перед полосой
 const finalZone = { x1: 0, y1: 0, x2: 0, y2: 0 };
 
 // фиксируем положение полосы в центре экрана при старте
 function initRunway() {
-  runway.x = (window.innerWidth - SIDEBAR_WIDTH) / 2 - RUNWAY_WIDTH / 2;
+  runway.x = (window.innerWidth - SIDEBAR_WIDTH) / 2 - RUNWAY_LENGTH / 2;
   runway.y = window.innerHeight / 2 - RUNWAY_HEIGHT / 2;
 
   // пересчитываем финальную зону один раз
@@ -174,7 +195,7 @@ class Plane {
     return airline + num;
   }
   
-  update() {
+  update(delta) {
     if (this.landing) {
       // движение к середине полосы
       const targetX = runway.x + runway.width/2;
@@ -187,8 +208,8 @@ class Plane {
       this.angle = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
 
       if (dist > this.speed) {
-        this.x += (dx / dist) * this.speed;
-        this.y += (dy / dist) * this.speed;
+        this.x += (dx / dist) * this.speed * delta;
+        this.y += (dy / dist) * this.speed * delta;
       } else {
         this.x = targetX;
         this.y = targetY;
@@ -197,8 +218,8 @@ class Plane {
     } else {
       // обычное движение
       const rad = ((this.angle - 90) * Math.PI) / 180;
-      this.x += this.speed * Math.cos(rad);
-      this.y += this.speed * Math.sin(rad);
+      this.x += this.speed * Math.cos(rad) * delta;
+      this.y += this.speed * Math.sin(rad) * delta;
 
       // проверка попадания в финал
       if (this.x >= finalZone.x1 && this.x <= finalZone.x2 &&
@@ -356,14 +377,18 @@ function drawRunway() {
 
 // =====================
 // ====== ИГРОВОЙ ЦИКЛ ======
-function gameLoop() {
+let lastTime = performance.now();
+
+function gameLoop(now) {
+  const delta = (now - lastTime) / 1000; // секунды
+  lastTime = now;
   ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
   drawRadarGrid();
   drawRunway();
 
   for (let i=planes.length-1; i>=0; i--) {
     const p = planes[i];
-    p.update();
+    p.update(delta);
 
     // проверка посадки
     if (p.landed) {
@@ -396,4 +421,10 @@ for (let i = 0; i < MAX_PLANES; i++) spawnPlane();
 setInterval(spawnPlane, 2500);
 refreshDisplay();
 setInterval(refreshDisplay, RADAR_UPLOAD);
-gameLoop();
+gameLoop(performance.now());
+
+
+
+// setInterval(() => {
+//   //console.log(planes);
+// }, RADAR_UPLOAD);
