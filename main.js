@@ -11,7 +11,7 @@ const STCA_RADIUS_M = 10000;          // радиус конфликтной з�
 const OFFSCREEN_MARGIN_M = 10000;   // запас за радиусом радара (10 км)
 const RADAR_RADIUS_M = 20000;       // радиус радара (20 км) // пока не используется напрямую
 const VECTOR_LENGTH_M = 3000;       // длина вектора направления (3 км)
-const PLANE_SPEED_KPH = 833; // для информации в формуляре
+const PLANE_SPEED_KPH = 1500; // для информации в формуляре
 const PLANE_SPEED_MPS = PLANE_SPEED_KPH / 3.6; // скорость самолёта (м/с ≈ 238 км/ч)
 
 // ==== ВИЗУАЛЬНЫЙ МАСШТАБ ====
@@ -240,45 +240,74 @@ class Plane {
   }
 
   drawLabel() {
-    const offsetX = 15;
-    const offsetY = -10;
+  const rad = ((this.angle - 90) * Math.PI) / 180;
 
-    const textX = this.displayX + offsetX;
-    const textY = this.displayY + offsetY;
+  // === 1. Базовое смещение формуляра относительно самолёта ===
+  const offset = 15;
+  let offsetX = -Math.sin(rad) * offset;
+  let offsetY = Math.cos(rad) * offset;
 
-    ctx.save();
-    ctx.font = '10px monospace';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = this.selected ? '#0f0' : '#fff';
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth = 3;
+  // Начальная позиция формуляра
+  let textX = this.displayX + offsetX;
+  let textY = this.displayY + offsetY;
 
-    const lines = [
-      `${this.callsign}`,
-      `HDG ${this.angle.toFixed(0).padStart(3,'0')}`,
-      `SPD ${this.groundSpeed}`,
-      `ALT ${this.altitude}`
-    ];
+  // === 2. Подготовка текста ===
+  ctx.save();
+  ctx.font = '10px monospace';
+  ctx.textBaseline = 'top';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.lineWidth = 3;
 
-    let maxWidth = 0;
-    lines.forEach(line => maxWidth = Math.max(maxWidth, ctx.measureText(line).width));
+  const lines = [
+    `${this.callsign}`,
+    `HDG ${this.angle.toFixed(0).padStart(3, '0')}`,
+    `SPD ${this.groundSpeed}`,
+    `ALT ${this.altitude}`
+  ];
 
-    const boxWidth = maxWidth + 8;
-    const boxHeight = lines.length * 12 + 4;
-
-    // Подложка
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(textX - 4, textY - 2, boxWidth, boxHeight);
-
-    // Текст
-    ctx.fillStyle = this.selected ? '#0f0' : '#fff';
-    lines.forEach((line, i) => {
-      const y = textY + i * 12;
-      ctx.fillText(line, textX, y);
-    });
-
-    ctx.restore();
+  // Определяем размеры текста
+  let maxWidth = 0;
+  for (const line of lines) {
+    maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
   }
+
+  const boxWidth = maxWidth + 8;
+  const boxHeight = lines.length * 12 + 4;
+
+  // === 3. Корректировка позиции для разных углов ===
+  if (this.angle > 180 && this.angle <= 270) {
+    // Нижняя левая четверть
+    textX = this.displayX - offsetX;
+    textY = this.displayY - offsetY;
+  }
+
+  let boxClosestCorner = textX - 4;
+  if (this.angle > 90 && this.angle <= 180) {
+    // Верхняя левая четверть
+    textX = this.displayX - boxWidth + offsetX;
+    boxClosestCorner = (textX - 4) + boxWidth;
+  }
+
+  // === 4. Рисуем подложку ===
+  ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
+  ctx.fillRect(textX - 4, textY - 2, boxWidth, boxHeight);
+
+  // === 5. Соединительная линия от самолёта к формуляру ===
+  ctx.beginPath();
+  ctx.moveTo(boxClosestCorner, textY - 2);
+  ctx.lineTo(this.displayX, this.displayY);
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // === 6. Отображение текста ===
+  ctx.fillStyle = this.selected ? '#0f0' : '#fff';
+  lines.forEach((line, i) => {
+    ctx.fillText(line, textX, textY + i * 12);
+  });
+
+  ctx.restore();
+}
 
 
   checkRunway() {
