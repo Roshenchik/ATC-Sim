@@ -43,6 +43,7 @@ const ui = {
   canvas: document.querySelector('[data-element="canvas"]'),
   planeInfo: document.querySelector('[data-element="plane-info"]'),
   courseInput: document.querySelector('[data-element="course-input"]'),
+  altitudeInput: document.querySelector('[data-element="altitude-input"]'),
 
   
   get radar() {
@@ -146,7 +147,12 @@ function updatePlaneInfo(plane) {
     ui.planeInfo.innerHTML = "<p>Выберите самолёт</p>";
     return;
   }
-  ui.planeInfo.innerHTML = `<p><b>Самолёт</b></p><p>Курс: ${plane.angle.toFixed(0)}°</p>`;
+  ui.planeInfo.innerHTML = `
+  <p><b>${plane.callsign}</b></p>
+  <p>Heading: ${plane.angle.toFixed(0)}°</p>
+  <p>Speed: ${plane.groundSpeed} км/ч</p>
+  <p>Altitude: FL${plane.flightLevel}</p>
+  `;
 }
 
 function checkSTCA(planes) {
@@ -158,7 +164,10 @@ function checkSTCA(planes) {
       const b = planes[j];
       const dx = a.x - b.x;
       const dy = a.y - b.y;
-      if (Math.sqrt(dx * dx + dy * dy) < STCA_RADIUS) {
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // STCA: только если расстояние меньше порога и эшелон совпадает
+      if (distance < STCA_RADIUS && a.flightLevel === b.flightLevel) {
         a.stca = true;
         b.stca = true;
       }
@@ -183,8 +192,12 @@ class Plane {
 
     // ---- формуляр ----
     this.callsign = this.generateCallsign();
-    this.altitude = 10000 + Math.floor(Math.random() * 20000); // футы
-    this.groundSpeed = 250 + Math.floor(Math.random() * 150); // узлы
+
+    const possibleFlightLevels = [290, 310, 330, 350, 370, 390, 410];
+    this.flightLevel = possibleFlightLevels[Math.floor(Math.random() * possibleFlightLevels.length)];
+    this.altitude = this.flightLevel * 100; // футы, чтобы сохранялась совместимость с ALT
+
+    this.groundSpeed = Math.floor(PLANE_SPEED * METERS_PER_PIXEL * 3.6); // узлы
 
   }
 
@@ -262,7 +275,7 @@ class Plane {
     `${this.callsign}`,
     `HDG ${this.angle.toFixed(0).padStart(3, '0')}`,
     `SPD ${this.groundSpeed}`,
-    `ALT ${this.altitude}`
+    `FL ${this.flightLevel}`
   ];
 
   // Определяем размеры текста
@@ -377,6 +390,15 @@ document.addEventListener('click', e => {
       updatePlaneInfo(selectedPlane);
     }
   }
+
+  if (action === 'set-flightlevel' && selectedPlane) {
+    const newFL = parseInt(document.querySelector('[data-element="flightlevel-input"]').value);
+    if (!isNaN(newFL) && newFL >= 0 && newFL <= 660) {
+      selectedPlane.flightLevel = newFL;
+      selectedPlane.altitude = newFL * 100;
+      updatePlaneInfo(selectedPlane);
+    }
+  }
 });
 
 // =====================
@@ -451,9 +473,3 @@ setInterval(spawnPlane, 2500);
 refreshDisplay();
 setInterval(refreshDisplay, RADAR_UPLOAD);
 gameLoop(performance.now());
-
-
-
-// setInterval(() => {
-//   //console.log(planes);
-// }, RADAR_UPLOAD);

@@ -16,12 +16,11 @@
         <canvas class="game-canvas" data-element="canvas"></canvas>
 
         <aside class="sidebar">
-            <h2>Авиадиспетчер</h2>
+            <h2>Flight Information</h2>
 
             <div class="plane-info" data-element="plane-info">
-                <p>Выберите самолёт</p>
+                <p>Select a plane</p>
             </div>
-
  
             <div class="controls">
                 <input
@@ -31,7 +30,16 @@
                     placeholder="Курс (°)"
                     data-element="course-input"
                 />
-                <button data-action="set-course">Задать курс</button>
+                <button data-action="set-course">Set heading</button>
+                <input
+                    type="number"
+                    min="0"
+                    max="660"
+                    step="10"
+                    placeholder="FL (100 ft)"
+                    data-element="flightlevel-input"
+                />
+                <button data-action="set-flightlevel">Set altitude</button>
             </div>
         </aside>
     </div>
