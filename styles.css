@@ -65,6 +65,14 @@ html, body {
   border-radius: 4px;
 }
 
+[data-element="speed-input"] {
+  padding: 0.6rem;
+  border: 1px solid #444;
+  background: #111;
+  color: var(--text-color);
+  border-radius: 4px;
+}
+
 button[data-action] {
   background: var(--accent-color);
   border: none;

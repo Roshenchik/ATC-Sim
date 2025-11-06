@@ -1,51 +1,61 @@
 // =====================
-// ====== КОНСТАНТЫ ======
+// ====== CONSTANTS ======
 // =====================
 
-// ==== РЕАЛЬНЫЕ РАЗМЕРЫ (в метрах) ====
-const RUNWAY_LENGTH_M = 3000;       // длина ВПП (типичная для международного аэропорта)
-const RUNWAY_WIDTH_M = 60;          // ширина ВПП
-const FINAL_LENGTH_M = 10000;        // длина участка финала
-const FINAL_BUFFER_M = 100;          // допустимая зона в финале
-const STCA_RADIUS_M = 10000;          // радиус конфликтной зоны (10 км)
-const OFFSCREEN_MARGIN_M = 10000;   // запас за радиусом радара (10 км)
-const RADAR_RADIUS_M = 20000;       // радиус радара (20 км) // пока не используется напрямую
-const VECTOR_LENGTH_M = 3000;       // длина вектора направления (3 км)
-const PLANE_SPEED_KPH = 1500; // для информации в формуляре
-const PLANE_SPEED_MPS = PLANE_SPEED_KPH / 3.6; // скорость самолёта (м/с ≈ 238 км/ч)
+// ---- real-world sizes (meters) ----
+const RUNWAY_LENGTH_M = 3000;
+const RUNWAY_WIDTH_M = 60;
+const FINAL_LENGTH_M = 10000;
+const FINAL_BUFFER_M = 100;
+const STCA_RADIUS_M = 10000;
+const OFFSCREEN_MARGIN_M = 10000;
+const RADAR_RADIUS_M = 20000;
+const VECTOR_LENGTH_M = 3000;
 
-// ==== ВИЗУАЛЬНЫЙ МАСШТАБ ====
-const RUNWAY_LENGTH_PX = 30; // длина полосы в пикселях — базовый визуальный размер
+const MIN_SPEED_KPH = 600; 
+const MAX_SPEED_KPH = 300; 
 
-// ==== ПЕРЕВОД В ПИКСЕЛИ ====
-const METERS_PER_PIXEL = RUNWAY_LENGTH_M / RUNWAY_LENGTH_PX; // сколько метров в 1 пикселе
+function kphToPxPerSec(kph) {
+  return (kph / 3.6) / METERS_PER_PIXEL; // м/с → px/с
+}
+
+// ---- visual scale (pixels) ----
+const RUNWAY_LENGTH_PX = 30; // runway visual length in px
+
+// ---- meters -> pixels conversion ----
+const METERS_PER_PIXEL = RUNWAY_LENGTH_M / RUNWAY_LENGTH_PX;
+function metersToPixels(meters) {
+  return meters / METERS_PER_PIXEL;
+}
 
 const RUNWAY_LENGTH = RUNWAY_LENGTH_PX;
-const RUNWAY_HEIGHT = (RUNWAY_WIDTH_M / METERS_PER_PIXEL) + 3; // +3 пикселя для видимости
-const FINAL_LENGTH = FINAL_LENGTH_M / METERS_PER_PIXEL;
-const FINAL_BUFFER = FINAL_BUFFER_M / METERS_PER_PIXEL;
-const STCA_RADIUS = STCA_RADIUS_M / METERS_PER_PIXEL;
-const OFFSCREEN_MARGIN = OFFSCREEN_MARGIN_M / METERS_PER_PIXEL;
-const RADAR_RADIUS = RADAR_RADIUS_M / METERS_PER_PIXEL;
-const VECTOR_LENGTH = VECTOR_LENGTH_M / METERS_PER_PIXEL;
-const PLANE_SPEED = PLANE_SPEED_MPS / METERS_PER_PIXEL; // в пикселях за кадр
-
-// ==== ПРОЧЕЕ ====
+const RUNWAY_HEIGHT = (RUNWAY_WIDTH_M / METERS_PER_PIXEL) + 3; // +3 px for visibility
+const FINAL_LENGTH = metersToPixels(FINAL_LENGTH_M);
+const FINAL_BUFFER = metersToPixels(FINAL_BUFFER_M);
+const STCA_RADIUS = metersToPixels(STCA_RADIUS_M);
+const OFFSCREEN_MARGIN = metersToPixels(OFFSCREEN_MARGIN_M);
+const RADAR_RADIUS = metersToPixels(RADAR_RADIUS_M);
+const VECTOR_LENGTH = metersToPixels(VECTOR_LENGTH_M);
+//const PLANE_SPEED = kphToPxPerSec(BASE_SPEED_KPH); // pixels per second unit (will be multiplied by delta)
+ 
+// ---- other ----
 const SIDEBAR_WIDTH = 260;
 const PLANE_SIZE = 4;
 const SELECT_RADIUS = Math.sqrt(PLANE_SIZE ** 2.5 + PLANE_SIZE ** 2.5);
 const RADAR_UPLOAD = 1000;
 const MAX_PLANES = 8;
+const AIRLINES = ["SAS", "DLH", "BAW", "AFL", "RYR", "KLM"];
 
 // =====================
-// ====== DOM ЭЛЕМЕНТЫ ======
+// ====== DOM / UI ======
+// =====================
 const ui = {
   canvas: document.querySelector('[data-element="canvas"]'),
   planeInfo: document.querySelector('[data-element="plane-info"]'),
   courseInput: document.querySelector('[data-element="course-input"]'),
   altitudeInput: document.querySelector('[data-element="altitude-input"]'),
 
-  
+  // radar computed from runway and canvas size
   get radar() {
     const centerX = runway.x + runway.width / 2;
     const centerY = runway.y + runway.height / 2;
@@ -53,72 +63,51 @@ const ui = {
     return { centerX, centerY, maxRadius };
   }
 };
+
 const ctx = ui.canvas.getContext('2d');
 let selectedPlane = null;
 
 // =====================
-// ====== ПОЛОСА ======
+// ====== RUNWAY ======
+// =====================
 const runway = { x: 0, y: 0, width: RUNWAY_LENGTH, height: RUNWAY_HEIGHT };
-// зона финала перед полосой
 const finalZone = { x1: 0, y1: 0, x2: 0, y2: 0 };
 
-// фиксируем положение полосы в центре экрана при старте
 function initRunway() {
+  // place runway in visual center at start
   runway.x = (window.innerWidth - SIDEBAR_WIDTH) / 2 - RUNWAY_LENGTH / 2;
   runway.y = window.innerHeight / 2 - RUNWAY_HEIGHT / 2;
 
-  // пересчитываем финальную зону один раз
+  // compute final zone once
   finalZone.x1 = runway.x - FINAL_LENGTH;
   finalZone.y1 = runway.y - FINAL_BUFFER;
   finalZone.x2 = runway.x;
   finalZone.y2 = runway.y + RUNWAY_HEIGHT + FINAL_BUFFER;
 }
+
 // =====================
-// ====== РИСОВАНИЕ СЕТКИ ======
+// ====== CANVAS SIZE (DPI) ======
 // =====================
-
-function drawRadarGrid() {
-  const { centerX, centerY, maxRadius } = ui.radar;
-  const ringStep = 100; // шаг дальности в пикселях
-  const angleStep = 15; // шаг азимута в градусах
-
-  ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-  ctx.lineWidth = 1;
-
-  // --- Концентрические круги ---
-  for (let r = ringStep; r < maxRadius; r += ringStep) {
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // --- Радиальные линии ---
-  for (let a = 0; a < 360; a += angleStep) {
-    const rad = (a * Math.PI) / 180;
-    const x2 = centerX + Math.cos(rad) * maxRadius;
-    const y2 = centerY + Math.sin(rad) * maxRadius;
-    ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
-const resizeCanvas = () => {
+function resizeCanvas() {
+  // set CSS pixel size to available area
   ui.canvas.width = window.innerWidth - SIDEBAR_WIDTH;
   ui.canvas.height = window.innerHeight;
-};
+}
 window.addEventListener('resize', resizeCanvas);
 
 // =====================
-// ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======
+// ====== HELPERS ======
+// =====================
+function degToRad(deg) { return deg * Math.PI / 180; }
+function radToDeg(rad) { return rad * 180 / Math.PI; }
+
+// =====================
+// ====== DRAWING HELPERS ======
+// =====================
 function drawPlane(ctx, x, y, angle, selected, stca = false) {
   const fillColor = stca ? 'red' : (selected ? 'green' : 'rgba(255,255,255,1)');
 
-  // ромб
+  // diamond shape
   ctx.beginPath();
   ctx.moveTo(x, y - PLANE_SIZE);
   ctx.lineTo(x + PLANE_SIZE, y);
@@ -130,8 +119,8 @@ function drawPlane(ctx, x, y, angle, selected, stca = false) {
   ctx.strokeStyle = 'rgba(255,255,255,0.2)';
   ctx.stroke();
 
-  // вектор направления
-  const rad = ((angle - 90) * Math.PI) / 180;
+  // heading vector (line)
+  const rad = degToRad(angle - 90);
   const x2 = x + Math.cos(rad) * VECTOR_LENGTH;
   const y2 = y + Math.sin(rad) * VECTOR_LENGTH;
   ctx.beginPath();
@@ -142,19 +131,68 @@ function drawPlane(ctx, x, y, angle, selected, stca = false) {
   ctx.stroke();
 }
 
+function drawRunway() {
+  ctx.fillStyle = 'gray';
+  ctx.fillRect(runway.x, runway.y, runway.width, runway.height);
+
+  // final line
+  ctx.strokeStyle = 'gray';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(runway.x, runway.y + RUNWAY_HEIGHT / 2);
+  ctx.lineTo(runway.x - FINAL_LENGTH, runway.y + RUNWAY_HEIGHT / 2);
+  ctx.stroke();
+}
+
+function drawRadarGrid() {
+  const { centerX, centerY, maxRadius } = ui.radar;
+  const ringStep = 100;
+  const angleStep = 15;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+
+  for (let r = ringStep; r < maxRadius; r += ringStep) {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  for (let a = 0; a < 360; a += angleStep) {
+    const rad = degToRad(a);
+    const x2 = centerX + Math.cos(rad) * maxRadius;
+    const y2 = centerY + Math.sin(rad) * maxRadius;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// =====================
+// ====== INFO PANEL ======
+// =====================
 function updatePlaneInfo(plane) {
   if (!plane) {
-    ui.planeInfo.innerHTML = "<p>Выберите самолёт</p>";
+    ui.planeInfo.innerHTML = "<p>Select a flight</p>";
     return;
   }
+
+  // internationalized labels kept short
   ui.planeInfo.innerHTML = `
-  <p><b>${plane.callsign}</b></p>
-  <p>Heading: ${plane.angle.toFixed(0)}°</p>
-  <p>Speed: ${plane.groundSpeed} км/ч</p>
-  <p>Altitude: FL${plane.flightLevel}</p>
+    <p><b>${plane.callsign}</b></p>
+    <p>Heading: ${plane.angle.toFixed(0)}°</p>
+    <p>Speed: ${plane.groundSpeed} km/h</p>
+    <p>Altitude: FL${plane.flightLevel}</p>
   `;
 }
 
+// =====================
+// ====== STCA CHECK ======
+// =====================
 function checkSTCA(planes) {
   planes.forEach(p => p.stca = false);
 
@@ -166,7 +204,7 @@ function checkSTCA(planes) {
       const dy = a.y - b.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // STCA: только если расстояние меньше порога и эшелон совпадает
+      // STCA triggers when horizontal separation < threshold AND same flight level
       if (distance < STCA_RADIUS && a.flightLevel === b.flightLevel) {
         a.stca = true;
         b.stca = true;
@@ -176,7 +214,8 @@ function checkSTCA(planes) {
 }
 
 // =====================
-// ====== КЛАСС САМОЛЁТА ======
+// ====== PLANE CLASS ======
+// =====================
 class Plane {
   constructor(x, y, angle) {
     this.x = x;
@@ -184,61 +223,77 @@ class Plane {
     this.angle = (angle + 360) % 360;
     this.displayX = x;
     this.displayY = y;
-    this.speed = PLANE_SPEED;
+
+    // determine speed randomly within range
+    const speedKph = MIN_SPEED_KPH + Math.random() * (MAX_SPEED_KPH - MIN_SPEED_KPH);
+    this.speed = kphToPxPerSec(speedKph);
+
     this.selected = false;
     this.stca = false;
-    this.landing = false; // заход на полосу
-    this.landed = false;  // завершение посадки
+    this.landing = false;
+    this.landed = false;
 
-    // ---- формуляр ----
+    // Flight strip fields
     this.callsign = this.generateCallsign();
-
-    const possibleFlightLevels = [290, 310, 330, 350, 370, 390, 410];
+    const possibleFlightLevels = [290, 300, 310, 320, 330, 340, 350, 360];
     this.flightLevel = possibleFlightLevels[Math.floor(Math.random() * possibleFlightLevels.length)];
-    this.altitude = this.flightLevel * 100; // футы, чтобы сохранялась совместимость с ALT
-
-    this.groundSpeed = Math.floor(PLANE_SPEED * METERS_PER_PIXEL * 3.6); // узлы
-
+    this.altitude = this.flightLevel * 100; // feet
+    this.groundSpeed = Math.floor(speedKph);
   }
 
+  // ======== LOGIC METHODS ========
+
   generateCallsign() {
-    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const airline = ["SAS", "DLH", "BAW", "AFL", "RYR", "KLM"][Math.floor(Math.random() * 6)];
+    const airline = AIRLINES[Math.floor(Math.random() * AIRLINES.length)];
     const num = Math.floor(100 + Math.random() * 900);
     return airline + num;
   }
-  
-  update(delta) {
-    if (this.landing) {
-      // движение к середине полосы
-      const targetX = runway.x + runway.width/2;
-      const targetY = runway.y + runway.height/2;
-      const dx = targetX - this.x;
-      const dy = targetY - this.y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
 
-      // пересчитываем угол для вектора
-      this.angle = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
+  // Update position for straight flight
+  updatePosition(delta) {
+    const rad = degToRad(this.angle - 90);
+    this.x += this.speed * Math.cos(rad) * delta;
+    this.y += this.speed * Math.sin(rad) * delta;
+  }
 
-      if (dist > this.speed) {
-        this.x += (dx / dist) * this.speed * delta;
-        this.y += (dy / dist) * this.speed * delta;
-      } else {
-        this.x = targetX;
-        this.y = targetY;
-        this.landed = true;
-      }
+  // Check if plane enters landing zone
+  checkLanding() {
+    if (!this.landing &&
+        this.x >= finalZone.x1 && this.x <= finalZone.x2 &&
+        this.y >= finalZone.y1 && this.y <= finalZone.y2) {
+      this.landing = true;
+    }
+  }
+
+  // Update plane position during landing
+  updateLanding(delta) {
+    const targetX = runway.x + runway.width / 2;
+    const targetY = runway.y + runway.height / 2;
+    const dx = targetX - this.x;
+    const dy = targetY - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    this.angle = (radToDeg(Math.atan2(dy, dx)) + 90 + 360) % 360;
+
+    if (dist > this.speed * delta) {
+      this.x += (dx / dist) * this.speed * delta;
+      this.y += (dy / dist) * this.speed * delta;
     } else {
-      // обычное движение
-      const rad = ((this.angle - 90) * Math.PI) / 180;
-      this.x += this.speed * Math.cos(rad) * delta;
-      this.y += this.speed * Math.sin(rad) * delta;
+      this.x = targetX;
+      this.y = targetY;
+      this.landed = true;
+    }
+  }
 
-      // проверка попадания в финал
-      if (this.x >= finalZone.x1 && this.x <= finalZone.x2 &&
-          this.y >= finalZone.y1 && this.y <= finalZone.y2) {
-        this.landing = true;
-      }
+  // Main update method: decides which logic to run
+  update(delta = 1 / 60) {
+    if (this.landed) return;
+
+    if (this.landing) {
+      this.updateLanding(delta);
+    } else {
+      this.updatePosition(delta);
+      this.checkLanding();
     }
   }
 
@@ -247,92 +302,75 @@ class Plane {
     this.displayY = this.y;
   }
 
-  draw() {
-    drawPlane(ctx, this.displayX, this.displayY, this.angle, this.selected, this.stca);
-    this.drawLabel();
-  }
-
-  drawLabel() {
-  const rad = ((this.angle - 90) * Math.PI) / 180;
-
-  // === 1. Базовое смещение формуляра относительно самолёта ===
-  const offset = 15;
-  let offsetX = -Math.sin(rad) * offset;
-  let offsetY = Math.cos(rad) * offset;
-
-  // Начальная позиция формуляра
-  let textX = this.displayX + offsetX;
-  let textY = this.displayY + offsetY;
-
-  // === 2. Подготовка текста ===
-  ctx.save();
-  ctx.font = '10px monospace';
-  ctx.textBaseline = 'top';
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-  ctx.lineWidth = 3;
-
-  const lines = [
-    `${this.callsign}`,
-    `HDG ${this.angle.toFixed(0).padStart(3, '0')}`,
-    `SPD ${this.groundSpeed}`,
-    `FL ${this.flightLevel}`
-  ];
-
-  // Определяем размеры текста
-  let maxWidth = 0;
-  for (const line of lines) {
-    maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
-  }
-
-  const boxWidth = maxWidth + 8;
-  const boxHeight = lines.length * 12 + 4;
-
-  // === 3. Корректировка позиции для разных углов ===
-  if (this.angle > 180 && this.angle <= 270) {
-    // Нижняя левая четверть
-    textX = this.displayX - offsetX;
-    textY = this.displayY - offsetY;
-  }
-
-  let boxClosestCorner = textX - 4;
-  if (this.angle > 90 && this.angle <= 180) {
-    // Верхняя левая четверть
-    textX = this.displayX - boxWidth + offsetX;
-    boxClosestCorner = (textX - 4) + boxWidth;
-  }
-
-  // === 4. Рисуем подложку ===
-  ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
-  ctx.fillRect(textX - 4, textY - 2, boxWidth, boxHeight);
-
-  // === 5. Соединительная линия от самолёта к формуляру ===
-  ctx.beginPath();
-  ctx.moveTo(boxClosestCorner, textY - 2);
-  ctx.lineTo(this.displayX, this.displayY);
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth = 0.5;
-  ctx.stroke();
-
-  // === 6. Отображение текста ===
-  ctx.fillStyle = this.selected ? '#0f0' : '#fff';
-  lines.forEach((line, i) => {
-    ctx.fillText(line, textX, textY + i * 12);
-  });
-
-  ctx.restore();
-}
-
-
   checkRunway() {
     return this.x > runway.x &&
            this.x < runway.x + runway.width &&
            this.y > runway.y &&
            this.y < runway.y + runway.height;
   }
+
+  // ======== VISUALIZATION METHODS ========
+  draw() {
+    drawPlane(ctx, this.displayX, this.displayY, this.angle, this.selected, this.stca);
+    this.drawLabel();
+  }
+
+  drawLabel() {
+    const rad = degToRad(this.angle - 90);
+    const offset = 15;
+    let offsetX = -Math.sin(rad) * offset;
+    let offsetY = Math.cos(rad) * offset;
+    let textX = this.displayX + offsetX;
+    let textY = this.displayY + offsetY;
+
+    ctx.save();
+    ctx.font = '10px monospace';
+    ctx.textBaseline = 'top';
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 3;
+
+    const lines = [
+      `${this.callsign}`,
+      `HDG ${this.angle.toFixed(0).padStart(3,'0')}`,
+      `SPD ${this.groundSpeed}`,
+      `FL ${this.flightLevel}`
+    ];
+
+    let maxWidth = 0;
+    for (const line of lines) maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
+    const boxWidth = maxWidth + 8;
+    const boxHeight = lines.length * 12 + 4;
+
+    if (this.angle > 180 && this.angle <= 270) {
+      textX = this.displayX - offsetX;
+      textY = this.displayY - offsetY;
+    }
+    let boxClosestCorner = textX - 4;
+    if (this.angle > 90 && this.angle <= 180) {
+      textX = this.displayX - boxWidth + offsetX;
+      boxClosestCorner = (textX - 4) + boxWidth;
+    }
+
+    ctx.fillStyle = 'rgba(100,100,100,0.5)';
+    ctx.fillRect(textX - 4, textY - 2, boxWidth, boxHeight);
+
+    ctx.beginPath();
+    ctx.moveTo(boxClosestCorner, textY - 2);
+    ctx.lineTo(this.displayX, this.displayY);
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    ctx.fillStyle = this.selected ? '#0f0' : '#fff';
+    lines.forEach((line,i) => ctx.fillText(line, textX, textY + i * 12));
+    ctx.restore();
+  }
 }
 
+
 // =====================
-// ====== МАССИВЫ И СОЗДАНИЕ САМОЛЁТОВ ======
+// ====== SPAWNING ======
+// =====================
 const planes = [];
 
 function spawnPlane() {
@@ -342,22 +380,34 @@ function spawnPlane() {
   const spawnRadius = maxRadius + OFFSCREEN_MARGIN;
   const angle = Math.random() * 360;
 
-  const rad = (angle * Math.PI) / 180;
+  const rad = degToRad(angle);
   const x = centerX + Math.cos(rad) * spawnRadius;
   const y = centerY + Math.sin(rad) * spawnRadius;
 
-  const courseToCenter = (Math.atan2(centerY - y, centerX - x) * 180 / Math.PI + 90 + 360) % 360;
+  const courseToCenter = (radToDeg(Math.atan2(centerY - y, centerX - x)) + 90 + 360) % 360;
   const angleWithNoise = courseToCenter + (Math.random() * 30 - 15);
 
   planes.push(new Plane(x, y, angleWithNoise));
 }
 
+// ====== REMOVING PLANES ======
+function removePlane(index) {
+  const p = planes[index];
+  if (selectedPlane === p) {
+    selectedPlane = null;
+    updatePlaneInfo(null);
+  }
+  planes.splice(index, 1);
+  spawnPlane();
+}
+
 // =====================
-// ====== СОБЫТИЯ ======
+// ====== INPUTS / EVENTS ======
+// =====================
 ui.canvas.addEventListener('click', e => {
   const rect = ui.canvas.getBoundingClientRect();
 
-  // convert from CSS pixels to canvas pixels
+  // convert CSS px -> canvas px
   const scaleX = ui.canvas.width / rect.width;
   const scaleY = ui.canvas.height / rect.height;
   const mx = (e.clientX - rect.left) * scaleX;
@@ -366,7 +416,7 @@ ui.canvas.addEventListener('click', e => {
   selectedPlane = null;
   planes.forEach(p => p.selected = false);
 
-  const radiusSq = SELECT_RADIUS * SELECT_RADIUS; // ensure SELECT_RADIUS is in canvas pixels
+  const radiusSq = SELECT_RADIUS * SELECT_RADIUS;
   for (const p of planes) {
     const dx = mx - p.displayX;
     const dy = my - p.displayY;
@@ -391,85 +441,88 @@ document.addEventListener('click', e => {
     }
   }
 
-  if (action === 'set-flightlevel' && selectedPlane) {
-    const newFL = parseInt(document.querySelector('[data-element="flightlevel-input"]').value);
+  if (action === 'set-altitude' && selectedPlane) {
+    const flInput = document.querySelector('[data-element="flightlevel-input"]');
+    if (!flInput) return;
+    const newFL = parseInt(flInput.value, 10);
+    // accept any FL from 0..660
     if (!isNaN(newFL) && newFL >= 0 && newFL <= 660) {
       selectedPlane.flightLevel = newFL;
       selectedPlane.altitude = newFL * 100;
       updatePlaneInfo(selectedPlane);
     }
   }
+
+  if (action === 'set-speed' && selectedPlane) {
+    const input = document.querySelector('[data-element="speed-input"]');
+    if (!input) return;
+
+    let newSpeed = parseFloat(input.value);
+    if (!isNaN(newSpeed)) {
+      // ограничиваем диапазон MIN/MAX вручную
+      if (newSpeed < MIN_SPEED_KPH) newSpeed = MIN_SPEED_KPH;
+      if (newSpeed > MAX_SPEED_KPH) newSpeed = MAX_SPEED_KPH;
+
+      selectedPlane.groundSpeed = newSpeed;
+      selectedPlane.speed = kphToPxPerSec(newSpeed);
+      updatePlaneInfo(selectedPlane);
+    }
+  }
 });
 
 // =====================
-// ====== ОБНОВЛЕНИЕ РАДАРА ======
+// ====== REFRESH / STCA ======
+// =====================
 function refreshDisplay() {
   planes.forEach(p => p.refreshDisplay());
   checkSTCA(planes);
 }
 
 // =====================
-// ====== РИСОВАНИЕ ПОЛОСЫ ======
-function drawRunway() {
-  // Полоса
-  ctx.fillStyle = 'gray';
-  ctx.fillRect(runway.x, runway.y, runway.width, runway.height);
-
-  // Линия финала (перед полосой)
-  ctx.strokeStyle = 'gray';
-  ctx.lineWidth = 1;
-
-  ctx.beginPath();
-  // допустим, линия горизонтальная сверху полосы
-  ctx.moveTo(runway.x, runway.y + RUNWAY_HEIGHT / 2);
-  ctx.lineTo(runway.x - FINAL_LENGTH, runway.y + RUNWAY_HEIGHT / 2);
-  ctx.stroke();
-}
-
+// ====== GAME LOOP ======
 // =====================
-// ====== ИГРОВОЙ ЦИКЛ ======
 let lastTime = performance.now();
 
 function gameLoop(now) {
-  const delta = (now - lastTime) / 1000; // секунды
+  // pass in timestamp from requestAnimationFrame; called initially as gameLoop(performance.now())
+  const delta = (now - lastTime) / 1000; // seconds
   lastTime = now;
+
   ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
   drawRadarGrid();
   drawRunway();
 
-  for (let i=planes.length-1; i>=0; i--) {
+  // update and garbage-collect planes
+  for (let i = planes.length - 1; i >= 0; i--) {
     const p = planes[i];
     p.update(delta);
 
-    // проверка посадки
-    if (p.landed) {
-      if (selectedPlane === p) { selectedPlane=null; updatePlaneInfo(null); }
-      planes.splice(i,1);
-      spawnPlane();
-      continue;
-    }
-
-    // удаление за экран
+    // landed -> remove
+    // outside radar -> remove
     const dx = p.x - ui.radar.centerX;
     const dy = p.y - ui.radar.centerY;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > ui.radar.maxRadius + OFFSCREEN_MARGIN + 20) {
-      if (selectedPlane === p) { selectedPlane = null; updatePlaneInfo(null); }
-      planes.splice(i, 1);
-      spawnPlane();
+    if (p.landed || dist > ui.radar.maxRadius + OFFSCREEN_MARGIN + 20) {
+      removePlane(i);
+      continue;
     }
   }
+
+  // draw
   planes.forEach(p => p.draw());
 
   requestAnimationFrame(gameLoop);
 }
 
 // =====================
-// ====== ЗАПУСК ======
+// ====== START ======
+// =====================
 resizeCanvas();
 initRunway();
 for (let i = 0; i < MAX_PLANES; i++) spawnPlane();
 setInterval(spawnPlane, 2500);
 refreshDisplay();
 setInterval(refreshDisplay, RADAR_UPLOAD);
+
+// Start the animation loop with an initial timestamp
 gameLoop(performance.now());
