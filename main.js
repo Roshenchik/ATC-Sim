@@ -42,7 +42,7 @@ const VECTOR_LENGTH = metersToPixels(VECTOR_LENGTH_M);
 const SIDEBAR_WIDTH = 260;
 const PLANE_SIZE = 4;
 const SELECT_RADIUS = Math.sqrt(PLANE_SIZE ** 2.5 + PLANE_SIZE ** 2.5);
-const RADAR_UPLOAD = 1000;
+const RADAR_UPLOAD = 5000;
 const MAX_PLANES = 8;
 const AIRLINES = ["SAS", "DLH", "BAW", "AFL", "RYR", "KLM"];
 
@@ -220,8 +220,11 @@ class Plane {
   constructor(x, y, angle) {
     this.x = x;
     this.y = y;
+
     this.angle = (angle + 360) % 360;
     this.setAngle = this.angle;
+    this.displayAngle = this.angle;
+
     this.displayX = x;
     this.displayY = y;
 
@@ -292,8 +295,7 @@ class Plane {
     if (Math.abs(angleDifference) <= turnRate * delta) { // snap to target if within this frame's turn amount
       this.angle = this.setAngle;
     }
-    //console.log('turn active')
-    //console.log(this.setAngle, this.angle, angleDifference, direction, turnRate);
+    //console.log(`this.setAngle: ${this.setAngle}, this.angle: ${this.angle}, angleDifference: ${angleDifference}, direction: ${direction}, turnRate: ${turnRate}`);
   }
 
   calcTurningRadius() {
@@ -358,6 +360,7 @@ class Plane {
   refreshDisplay() {
     this.displayX = this.x;
     this.displayY = this.y;
+    this.displayAngle = this.angle;
   }
 
   checkRunway() {
@@ -369,12 +372,12 @@ class Plane {
 
   // ======== VISUALIZATION METHODS ========
   draw() {
-    drawPlane(ctx, this.displayX, this.displayY, this.angle, this.selected, this.stca);
+    drawPlane(ctx, this.displayX, this.displayY, this.displayAngle, this.selected, this.stca);
     this.drawLabel();
   }
 
   drawLabel() {
-    const rad = degToRad(this.angle - 90);
+    const rad = degToRad(this.displayAngle - 90);
     const offset = 15;
     let offsetX = -Math.sin(rad) * offset;
     let offsetY = Math.cos(rad) * offset;
@@ -399,12 +402,12 @@ class Plane {
     const boxWidth = maxWidth + 8;
     const boxHeight = lines.length * 12 + 4;
 
-    if (this.angle > 180 && this.angle <= 270) {
+    if (this.displayAngle > 180 && this.displayAngle <= 270) {
       textX = this.displayX - offsetX;
       textY = this.displayY - offsetY;
     }
     let boxClosestCorner = textX - 4;
-    if (this.angle > 90 && this.angle <= 180) {
+    if (this.displayAngle > 90 && this.displayAngle <= 180) {
       textX = this.displayX - boxWidth + offsetX;
       boxClosestCorner = (textX - 4) + boxWidth;
     }
