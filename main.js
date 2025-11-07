@@ -5,22 +5,25 @@
 // ---- real-world sizes (meters) ----
 const RUNWAY_LENGTH_M = 3000;
 const RUNWAY_WIDTH_M = 60;
-const FINAL_LENGTH_M = 10000;
+const FINAL_LENGTH_M = 20000;
 const FINAL_BUFFER_M = 100;
 const STCA_RADIUS_M = 10000;
 const OFFSCREEN_MARGIN_M = 10000;
 const RADAR_RADIUS_M = 20000;
-const VECTOR_LENGTH_M = 3000;
+const VECTOR_LENGTH_M = 5000;
 
 const MIN_SPEED_KPH = 600; 
 const MAX_SPEED_KPH = 900; 
+
+const MAX_CLIMB_RATE_FPM = 2500; 
+const MAX_DESCENT_RATE_FPM = 3000; 
 
 function kphToPxPerSec(kph) {
   return (kph / 3.6) / METERS_PER_PIXEL; // м/с → px/с
 }
 
 // ---- visual scale (pixels) ----
-const RUNWAY_LENGTH_PX = 30; // runway visual length in px
+const RUNWAY_LENGTH_PX = 15; // runway visual length in px
 
 // ---- meters -> pixels conversion ----
 const METERS_PER_PIXEL = RUNWAY_LENGTH_M / RUNWAY_LENGTH_PX;
@@ -244,6 +247,10 @@ class Plane {
     this.flightLevel = possibleFlightLevels[Math.floor(Math.random() * possibleFlightLevels.length)];
     this.altitude = this.flightLevel * 100; // feet
     this.groundSpeed = Math.floor(speedKph);
+
+    this.targetAltitude = this.altitude; // цель по высоте (в футах)
+    this.maxClimbRate = MAX_CLIMB_RATE_FPM; // футов в минуту, реалистично для пассажирских лайнеров
+    this.maxDescentRate = MAX_DESCENT_RATE_FPM; // футов в минуту
   }
 
   // ======== LOGIC METHODS ========
@@ -259,6 +266,24 @@ class Plane {
     const rad = degToRad(this.angle - 90);
     this.x += this.speed * Math.cos(rad) * delta;
     this.y += this.speed * Math.sin(rad) * delta;
+  }
+
+  updateAltitude(delta) {
+  const vertSpeedFpm = this.targetAltitude > this.altitude ? this.maxClimbRate : this.maxDescentRate;
+  
+  // переводим delta (секунды) и FPM в футы за кадр
+  const vertSpeedFpf = vertSpeedFpm * (delta / 60);
+
+  if (Math.abs(this.targetAltitude - this.altitude) <= vertSpeedFpf) {
+    this.altitude = this.targetAltitude;
+  } else if (this.targetAltitude > this.altitude) {
+    this.altitude += vertSpeedFpf;
+  } else {
+    this.altitude -= vertSpeedFpf;
+  }
+
+  // синхронизируем FL
+  this.flightLevel = Math.round(this.altitude / 100);
   }
 
   turn(delta) {
@@ -348,6 +373,10 @@ class Plane {
     if (this.setAngle !== this.angle) {
       this.turn(delta);
     }
+
+    if (this.targetAltitude !== this.altitude) {
+    this.updateAltitude(delta);
+   }
 
     if (this.landing) {
       this.updateLanding(delta);
@@ -484,9 +513,9 @@ ui.canvas.addEventListener('click', e => {
     if (dx * dx + dy * dy < radiusSq) {
       p.selected = true;
       selectedPlane = p;
-      console.log(`Selected plane: ${p.callsign}, heading ${p.angle}°, speed ${p.groundSpeed} km/h`); // delete after testing
+      console.log(`Selected plane: ${p.callsign}, heading ${p.angle}°, speed ${p.groundSpeed} km/h, altitude ${p.altitude} ft`); // delete after testing
       let maxAngularSpeed = p.calcMaxAngularSpeed(); // delete after testing
-      console.log(`Max angular speed for ${p.callsign}: ${maxAngularSpeed.toFixed(2)} deg/sec`); // delete after testing
+      //console.log(`Max angular speed for ${p.callsign}: ${maxAngularSpeed.toFixed(2)} deg/sec`); // delete after testing
       updatePlaneInfo(p);
       break;
     }
@@ -511,8 +540,7 @@ document.addEventListener('click', e => {
     const newFL = parseInt(flInput.value, 10);
     // accept any FL from 0..660
     if (!isNaN(newFL) && newFL >= 0 && newFL <= 660) {
-      selectedPlane.flightLevel = newFL;
-      selectedPlane.altitude = newFL * 100;
+      selectedPlane.targetAltitude = newFL * 100;
       updatePlaneInfo(selectedPlane);
     }
   }
