@@ -259,14 +259,13 @@ class Plane {
   }
 
   turn(delta) {
-    //let adjustedAngle = ((this.setAngle - this.angle + 540) % 360) - 180;
     const roundedAngle = Math.round((this.angle + 360) % 360);
     const roundedSetAngle = Math.round((this.setAngle + 360) % 360);
     let direction = null;
 
     let angleDifference = roundedSetAngle - roundedAngle;
 
-    // Нормализуем разницу в диапазон [-180, 180]
+    // normalize [-180, 180]
     while (angleDifference <= -180) {
         angleDifference += 360;
     }
@@ -280,38 +279,36 @@ class Plane {
         direction = 'left';
     }
 
-    const turnRate = 3; // degrees per second (fixed for now)
+    const turnRate = this.calcMaxAngularSpeed(); // degrees per second
+
     if (Math.abs(angleDifference) > 0.5) {
       if (direction === 'right') {
-          this.angle = (this.angle + turnRate * delta) % 360; // temporary fixed turn
+          this.angle = (this.angle + turnRate * delta) % 360;
       } else {
-          this.angle = (this.angle - turnRate * delta + 360) % 360; // временный фиксированный поворот
+          this.angle = (this.angle - turnRate * delta + 360) % 360; 
       }
-      // console.log(roundedSetAngle, roundedAngle); // Debug: uncomment if needed
     }
+    
+    if (Math.abs(angleDifference) <= turnRate * delta) { // snap to target if within this frame's turn amount
+      this.angle = this.setAngle;
+    }
+    //console.log('turn active')
+    //console.log(this.setAngle, this.angle, angleDifference, direction, turnRate);
   }
-  
-  // calcTurningRadius() {
-  //   const g = 9.81; // ускорение свободного падения
-  //   const V = this.groundSpeed / 3.6; // км/ч → м/с
-  //   const phi = this.bankAngle * Math.PI / 180; // градусы → радианы
-  //   return V * V / (g * Math.tan(phi)); // радиус в метрах
-  // }
 
-  // calcMaxAngularSpeed() {
-  // const R = this.calcTurningRadius(); // м
-  // const V = this.groundSpeed / 3.6; // м/с
-  // const maxAngularSpeed = radToDeg(V / R); // град/сек
-  // return maxAngularSpeed;
-  // }
+  calcTurningRadius() {
+    const g = 9.81; // ускорение свободного падения
+    const V = this.groundSpeed / 3.6; // км/ч → м/с
+    const phi = this.bankAngle * Math.PI / 180; // градусы → радианы
+    return V * V / (g * Math.tan(phi)); // радиус в метрах
+  }
 
-  // updateCourse(targetAngle) {
-  //   // вычисляем кратчайший путь между текущим курсом и целевым
-  //   let adjustedAngle = ((targetAngle - this.angle + 540) % 360) - 180; 
-  //   if (this.angle !== targetAngle) {
-  //     this.angle += 1; // временный фиксированный поворот
-  //   }
-  // }
+  calcMaxAngularSpeed() {
+  const R = this.calcTurningRadius(); // м
+  const V = this.groundSpeed / 3.6; // м/с
+  const maxAngularSpeed = radToDeg(V / R); // град/сек
+  return maxAngularSpeed;
+  }
 
   // Check if plane enters landing zone
   checkLanding() {
@@ -439,14 +436,14 @@ function spawnPlane() {
 
   const { centerX, centerY, maxRadius } = ui.radar;
   const spawnRadius = maxRadius + OFFSCREEN_MARGIN;
-  const angle = Math.random() * 360;
+  const angle = Math.round(Math.random() * 360);
 
   const rad = degToRad(angle);
   const x = centerX + Math.cos(rad) * spawnRadius;
   const y = centerY + Math.sin(rad) * spawnRadius;
 
   const courseToCenter = (radToDeg(Math.atan2(centerY - y, centerX - x)) + 90 + 360) % 360;
-  const angleWithNoise = courseToCenter + (Math.random() * 30 - 15);
+  const angleWithNoise = courseToCenter + Math.round(Math.random() * 30 - 15);
 
   planes.push(new Plane(x, y, angleWithNoise));
 }
@@ -484,9 +481,9 @@ ui.canvas.addEventListener('click', e => {
     if (dx * dx + dy * dy < radiusSq) {
       p.selected = true;
       selectedPlane = p;
-      console.log(`Selected plane: ${p.callsign}, heading ${p.angle}°, speed ${p.groundSpeed} km/h`);
-      // let maxAngularSpeed = p.calcMaxAngularSpeed();
-      // console.log(`Max angular speed for ${p.callsign}: ${maxAngularSpeed.toFixed(2)} deg/sec`);
+      console.log(`Selected plane: ${p.callsign}, heading ${p.angle}°, speed ${p.groundSpeed} km/h`); // delete after testing
+      let maxAngularSpeed = p.calcMaxAngularSpeed(); // delete after testing
+      console.log(`Max angular speed for ${p.callsign}: ${maxAngularSpeed.toFixed(2)} deg/sec`); // delete after testing
       updatePlaneInfo(p);
       break;
     }
@@ -501,7 +498,6 @@ document.addEventListener('click', e => {
     const newAngle = parseFloat(ui.courseInput.value);
     if (!isNaN(newAngle) && newAngle >= 0 && newAngle < 360) {
       selectedPlane.setAngle = newAngle;
-      console.log(`Setting heading of ${selectedPlane.callsign} to ${newAngle}°`);
       updatePlaneInfo(selectedPlane);
     }
   }
