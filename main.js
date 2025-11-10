@@ -1,3 +1,5 @@
+import { globals } from './globals.js';
+
 // =====================
 // ====== CONSTANTS ======
 // =====================
@@ -14,6 +16,8 @@ const VECTOR_LENGTH_M = 5000;
 
 const MIN_SPEED_KPH = 600; 
 const MAX_SPEED_KPH = 900; 
+const ACCELERATION_KPH_PER_SEC = 5; // крейсерская смена скорости
+const DECELERATION_KPH_PER_SEC = 5; // замедление
 
 const MAX_CLIMB_RATE_FPM = 2500; 
 const MAX_DESCENT_RATE_FPM = 3000; 
@@ -192,6 +196,7 @@ function updatePlaneInfo(plane) {
     <p>Altitude: FL${plane.flightLevel}</p>
   `;
 }
+globals.updatePlaneInfo = updatePlaneInfo;
 
 // =====================
 // ====== STCA CHECK ======
@@ -234,6 +239,8 @@ class Plane {
     // determine speed randomly within range
     const speedKph = MIN_SPEED_KPH + Math.random() * (MAX_SPEED_KPH - MIN_SPEED_KPH);
     this.speed = kphToPxPerSec(speedKph);
+    this.accelerationKphPerSec = ACCELERATION_KPH_PER_SEC;
+    this.decelerationKphPerSec = DECELERATION_KPH_PER_SEC;
 
     this.selected = false;
     this.stca = false;
@@ -246,7 +253,9 @@ class Plane {
     const possibleFlightLevels = [290, 300, 310, 320, 330, 340, 350, 360];
     this.flightLevel = possibleFlightLevels[Math.floor(Math.random() * possibleFlightLevels.length)];
     this.altitude = this.flightLevel * 100; // feet
+
     this.groundSpeed = Math.floor(speedKph);
+    this.targetSpeed = Math.floor(speedKph);
 
     this.targetAltitude = this.altitude; // цель по высоте (в футах)
     this.maxClimbRate = MAX_CLIMB_RATE_FPM; // футов в минуту, реалистично для пассажирских лайнеров
@@ -281,9 +290,24 @@ class Plane {
   } else {
     this.altitude -= vertSpeedFpf;
   }
-
   // синхронизируем FL
   this.flightLevel = Math.round(this.altitude / 100);
+  }
+
+  updateSpeed(delta) {
+    const deltaSpeed = this.targetSpeed - this.groundSpeed; // разница в скорости
+    const maxDelta = this.accelerationKphPerSec * delta; // максимально возможное изменение за этот кадр
+
+    if (Math.abs(deltaSpeed) <= maxDelta) {
+      this.groundSpeed = this.targetSpeed; // достигли цели
+    } else {
+      this.groundSpeed += Math.sign(deltaSpeed) * maxDelta; // увеличиваем или уменьшаем
+    }
+
+    // пересчитываем пиксели/сек
+    this.speed = kphToPxPerSec(this.groundSpeed);
+
+    console.log(`Plane ${this.callsign} speed updated to ${this.groundSpeed} km/h`);
   }
 
   turn(delta) {
@@ -376,7 +400,11 @@ class Plane {
 
     if (this.targetAltitude !== this.altitude) {
     this.updateAltitude(delta);
-   }
+    }
+
+    if (this.targetSpeed !== this.groundSpeed) {
+      this.updateSpeed(delta);
+    }
 
     if (this.landing) {
       this.updateLanding(delta);
@@ -422,7 +450,7 @@ class Plane {
     const lines = [
       `${this.callsign}`,
       `HDG ${this.angle.toFixed(0).padStart(3,'0')}`,
-      `SPD ${this.groundSpeed}`,
+      `SPD ${this.groundSpeed.toFixed(0)}`,
       `FL ${this.flightLevel}`
     ];
 
@@ -462,6 +490,7 @@ class Plane {
 // ====== SPAWNING ======
 // =====================
 const planes = [];
+globals.planes = planes;
 
 function spawnPlane() {
   if (planes.length >= MAX_PLANES) return;
@@ -513,6 +542,7 @@ ui.canvas.addEventListener('click', e => {
     if (dx * dx + dy * dy < radiusSq) {
       p.selected = true;
       selectedPlane = p;
+      globals.selectedPlane = p;
       console.log(`Selected plane: ${p.callsign}, heading ${p.angle}°, speed ${p.groundSpeed} km/h, altitude ${p.altitude} ft`); // delete after testing
       let maxAngularSpeed = p.calcMaxAngularSpeed(); // delete after testing
       //console.log(`Max angular speed for ${p.callsign}: ${maxAngularSpeed.toFixed(2)} deg/sec`); // delete after testing
@@ -555,8 +585,7 @@ document.addEventListener('click', e => {
       if (newSpeed < MIN_SPEED_KPH) newSpeed = MIN_SPEED_KPH;
       if (newSpeed > MAX_SPEED_KPH) newSpeed = MAX_SPEED_KPH;
 
-      selectedPlane.groundSpeed = newSpeed;
-      selectedPlane.speed = kphToPxPerSec(newSpeed);
+      selectedPlane.targetSpeed = newSpeed;
       updatePlaneInfo(selectedPlane);
     }
   }
