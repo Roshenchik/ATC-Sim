@@ -307,7 +307,7 @@ class Plane {
     // пересчитываем пиксели/сек
     this.speed = kphToPxPerSec(this.groundSpeed);
 
-    console.log(`Plane ${this.callsign} speed updated to ${this.groundSpeed} km/h`);
+    //console.log(`Plane ${this.callsign} speed updated to ${this.groundSpeed} km/h`);
   }
 
   turn(delta) {
