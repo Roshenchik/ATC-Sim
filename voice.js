@@ -38,6 +38,8 @@ const updatePlaneInfo = globals.updatePlaneInfo;
     NINER: "9"
   };
 
+  import { callsignAliasesJoined } from './callsignAliases.js';
+
 
 // =======================
 // === VOICE CONTROL ====
@@ -118,6 +120,7 @@ function extractCallsign(text) {
     i++;
     if (i < words.length && (numMap[words[i]] || /\d/.test(words[i]))) break;
   }
+  airlineLetters = callsignAliasesJoined[airlineLetters] || airlineLetters; // заменяем на алиас, если есть
 
   // === собираем цифры ===
   while (i < words.length && (numMap[words[i]] || /\d/.test(words[i]))) {
