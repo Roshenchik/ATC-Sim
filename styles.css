@@ -1,5 +1,5 @@
 :root {
-  --bg-color: #001;
+  --bg-color: rgb(6, 9, 36);
   --runway-color: #555;
   --text-color: #eee;
   --accent-color: #f90;
@@ -28,7 +28,7 @@ html, body {
 
 .sidebar {
   /* width: 260px; */
-  background: rgba(20, 20, 30, 0.95);
+  background: rgba(0, 0, 0, 0.3);
   padding: 1rem;
   box-sizing: border-box;
   border-left: 2px solid #333;

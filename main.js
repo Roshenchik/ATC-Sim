@@ -15,7 +15,10 @@ const RADAR_RADIUS_M = 20000;
 const VECTOR_LENGTH_M = 5000;
 
 const MIN_SPEED_KPH = 600; 
-const MAX_SPEED_KPH = 900; 
+const MAX_SPEED_KPH = 900;
+globals.MIN_SPEED_KPH = MIN_SPEED_KPH;
+globals.MAX_SPEED_KPH = MAX_SPEED_KPH;
+
 const ACCELERATION_KPH_PER_SEC = 5; // крейсерская смена скорости
 const DECELERATION_KPH_PER_SEC = 5; // замедление
 
