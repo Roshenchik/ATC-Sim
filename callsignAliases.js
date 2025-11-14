@@ -125,6 +125,8 @@
   "WESTJET AIRLINES": "WJA"
 };
 
+//killometers per hour, knots, mach number
+
 function normalizeCallsign(str) {
   return str.toUpperCase().replace(/[\s\-.,]/g, '');
 }

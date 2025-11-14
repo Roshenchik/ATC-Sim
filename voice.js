@@ -75,9 +75,29 @@ if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       console.warn(`No plane found with callsign: ${callsign}`);
     }
 
-    setHeading(rest, selectedPlane, updatePlaneInfo);
-    setAltitude(rest, selectedPlane, updatePlaneInfo);
-    setSpeed(rest, selectedPlane, updatePlaneInfo);
+    const commands = parseCommands(rest);
+    if (commands.length === 0) {
+      console.log("ℹ️ No commands found in rest.");
+    } else {
+      console.log(`📝 Found ${commands.length} command(s):`, commands.map(c => c.type).join("; "));
+    }
+
+    commands.forEach(cmd => {
+      switch (cmd.type) {
+        case "HEADING":
+          setHeading(cmd.words, selectedPlane, updatePlaneInfo);
+          break;
+        case "SPEED":
+          setSpeed(cmd.words, selectedPlane, updatePlaneInfo);
+          break;
+        case "LEVEL":
+        case "ALTITUDE":
+          setAltitude(cmd.words, selectedPlane, updatePlaneInfo, cmd.type);
+          break;
+        default:
+          console.log("⚙️ Unknown command type:", cmd.type);
+      }
+    });
   };
 
   recognition.onerror = (event) => {
@@ -134,70 +154,75 @@ function extractCallsign(text) {
   return { callsign, rest };
 }
 
-function setHeading(comandText, selectedPlane, updatePlaneInfo) {
-    if (selectedPlane && comandText.includes("HEADING")) {
-    const headingPart = comandText.split("HEADING")[1].trim().split(/\s+/);
-    
-    const newHeading = convertWordsToDigits(headingPart);
-    if (newHeading === null) { console.warn("No heading digits found"); return; }
 
-    if (newHeading >= 0 && newHeading < 360) {
-      selectedPlane.setAngle = newHeading;
-      updatePlaneInfo(selectedPlane);
-      console.log(`✅ Set heading ${newHeading}° for ${selectedPlane.callsign}`);
-    } else {
-      console.warn("⚠️ Invalid heading:", newHeading);
+function parseCommands(restText) {
+  const commandKeys = ["HEADING", "SPEED", "LEVEL", "ALTITUDE"];
+  const words = restText.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  const commands = [];
+
+  //console.log("🧩 parseCommands(): входные слова →", words);
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].toUpperCase();
+
+    if (commandKeys.includes(word)) {
+      const type = word;
+      const commandWords = [];
+      i++;
+
+      // Собираем все слова до следующего ключевого слова
+      while (i < words.length && !commandKeys.includes(words[i].toUpperCase())) {
+        commandWords.push(words[i]);
+        i++;
+      }
+      i--; // откатываем, чтобы не пропустить следующий ключ
+      commands.push({ type, words: commandWords });
     }
+  }
+
+  console.log("🔍 Найдено команд →", commands);
+  return commands;
+}
+
+function setHeading(words, selectedPlane, updatePlaneInfo) {
+  if (!selectedPlane) return;
+  const heading = convertWordsToDigits(words) % 360;
+  if (heading !== null && heading >= 0 && heading < 360) {
+    selectedPlane.setAngle = heading;
+    updatePlaneInfo(selectedPlane);
+    console.log(`✅ HEADING ${heading}° for ${selectedPlane.callsign}`);
+  } else console.warn("⚠️ Invalid heading:", heading);
+}
+
+function setAltitude(words, selectedPlane, updatePlaneInfo, type) {
+
+  const types = {
+    LEVEL: { max: 660, factor: 100, unit: "FL" },
+    ALTITUDE: { max: 6000, factor: 1, unit: "feet" }
+  };
+
+  const cfg = types[type];
+  if (!cfg) return console.warn("⚠️ Unknown altitude type:", type);
+
+  const altitude = convertWordsToDigits(words);
+  if (altitude !== null && altitude >= 0 && altitude < cfg.max) {
+    selectedPlane.targetAltitude = altitude * cfg.factor;
+    updatePlaneInfo(selectedPlane);
+    console.log(`✅ Set ${cfg.unit} ${altitude} for ${selectedPlane.callsign}`);
+  } else {
+    console.warn("⚠️ Invalid altitude:", altitude);
   }
 }
 
-function setAltitude(comandText, selectedPlane, updatePlaneInfo) {
-    if (selectedPlane && comandText.includes("LEVEL")) {
-    const altitudePart = comandText.split("LEVEL")[1].trim().split(/\s+/);
-    
-    const newFL = convertWordsToDigits(altitudePart);
-    if (newFL === null) { console.warn("No altitudes digits found"); return; }
+function setSpeed(words, selectedPlane, updatePlaneInfo) {
 
-    if (newFL >= 0 && newFL < 660) {
-      selectedPlane.targetAltitude = newFL * 100;
-      updatePlaneInfo(selectedPlane);
-      console.log(`✅ Set FL ${newFL} for ${selectedPlane.callsign}`);
-    } else {
-      console.warn("⚠️ Invalid FL:", newFL);
-    }
-  }
-
-    if (selectedPlane && comandText.includes("ALTITUDE")) {
-    const altitudePart = comandText.split("ALTITUDE")[1].trim().split(/\s+/);
-    
-    const newAltitude = convertWordsToDigits(altitudePart);
-    if (newAltitude === null) { console.warn("No altitudes digits found"); return; }
-
-    if (newAltitude >= 0 && newAltitude < 6000) {
-      selectedPlane.targetAltitude = newAltitude;
-      updatePlaneInfo(selectedPlane);
-      console.log(`✅ Set altitude ${newAltitude} for ${selectedPlane.callsign}`);
-    } else {
-      console.warn("⚠️ Invalid altitude:", newAltitude);
-    }
-  }
-}
-
-function setSpeed(comandText, selectedPlane, updatePlaneInfo) {
-    if (selectedPlane && comandText.includes("SPEED")) {
-    const speedPart = comandText.split("SPEED")[1].trim().split(/\s+/);
-    
-    const newSpeed = convertWordsToDigits(speedPart);
-    if (newSpeed === null) { console.warn("No speed digits found"); return; }
-
-    if (newSpeed >= globals.MIN_SPEED_KPH && newSpeed < globals.MAX_SPEED_KPH) {
-      selectedPlane.targetSpeed = newSpeed;
-      updatePlaneInfo(selectedPlane);
-      console.log(`✅ Set speed ${newSpeed} km/h for ${selectedPlane.callsign}`);
-    } else {
-      console.warn("⚠️ Invalid speed:", newSpeed);
-    }
-  }
+  if (!selectedPlane) return;
+  const speed = convertWordsToDigits(words);
+  if (speed !== null && speed >= globals.MIN_SPEED_KPH && speed < globals.MAX_SPEED_KPH) {
+    selectedPlane.targetSpeed = speed;
+    updatePlaneInfo(selectedPlane);
+    console.log(`✅ SPEED ${speed} km/h for ${selectedPlane.callsign}`);
+  } else console.warn("⚠️ Invalid speed:", speed);
 }
 
 function convertWordsToDigits(wordsArray) {
