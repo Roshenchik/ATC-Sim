@@ -243,7 +243,7 @@ export async function playPilotConfirm(prefix, number, extraWords  = ['wilco']) 
       return files.push(`${phraseToFilename(extra)}.mp3`);
     });
   }
-  
+
   callsign.forEach(s => files.push(s));
 
   await playFilesSequential(files);
@@ -264,8 +264,75 @@ export async function playPilotReport(prefix, number, extraWords = null) {
     });
   }
 
-  console.log(files)
   await playFilesSequential(files);
+}
+
+
+
+export function confirmHeadingChange(plane, newAngle) {
+  const angle = plane.angle
+  const side = plane.turnDirection(newAngle, angle)
+  let nums = newAngle.toString().padStart(3, '0').split('')
+  let affirmWord = 'wilco' //just in case, instead of null
+
+  if (side > 0) {
+    affirmWord = 'turning right'
+  } else if (side < 0) {
+    affirmWord = 'turning left'
+  } else {
+    sayReachedHeading(plane);
+    return;
+  }
+  const confirm = [affirmWord, 'heading', nums].flat();
+
+  playPilotConfirm(plane.callsignPrefix, plane.callsignNum, confirm)
+}
+export function sayReachedHeading(plane) {
+  let nums = plane.angle.toString().split('')
+  const report = ['heading', nums].flat();
+
+  playPilotReport(plane.callsignPrefix, plane.callsignNum, report)
+}
+
+
+export function confirmAltitudeChange(plane, newFL) {
+  let nums = newFL.toString().split('')
+  let affirmWord = 'wilco' //just in case, instead of null
+
+  if (plane.altitude < plane.targetAltitude) {
+    affirmWord = 'climbing flight level';
+  } else if (plane.altitude > plane.targetAltitude) {
+    affirmWord = 'descending flight level';
+  } else {
+    sayReachedAltitude(plane);
+    return;
+  }
+  const confirm = [affirmWord, nums].flat();
+
+  playPilotConfirm(plane.callsignPrefix, plane.callsignNum, confirm)
+}
+export function sayReachedAltitude(plane) {
+  let nums = plane.flightLevel.toString().split('')
+  const report = ['flight level', nums].flat();
+
+  playPilotReport(plane.callsignPrefix, plane.callsignNum, report)
+}
+
+export function confirmSpeedChange(plane, newSpeed) {
+  if (plane.groundSpeed == newSpeed) {
+    sayReachedSpeed(plane);
+    return;
+  };
+
+  let nums = newSpeed.toString().split('')
+  let affirmWord = 'wilco' //just in case, instead of null
+  const confirm = [affirmWord, nums, 'kilometers per hour'].flat();
+  playPilotConfirm(plane.callsignPrefix, plane.callsignNum, confirm)
+}
+export function sayReachedSpeed(plane) {
+  let nums = plane.groundSpeed.toString().split('')
+  const report = ['speed', nums, 'kilometers per hour'].flat();
+  playPilotReport(plane.callsignPrefix, plane.callsignNum, report)
 }
 
 await preloadAssets();
