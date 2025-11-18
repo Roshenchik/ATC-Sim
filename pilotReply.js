@@ -236,10 +236,33 @@ export async function playPilotConfirm(prefix, number, extraWords  = ['wilco']) 
 
   const files = []
   const callsign = await buildCallsignSequence(prefix, number)
-  console.log(callsign);
+  
+  if (extraWords) {
+    extraWords.forEach(extra => {
+      if (extra === null) return
+      return files.push(`${phraseToFilename(extra)}.mp3`);
+    });
+  }
   
   callsign.forEach(s => files.push(s));
-  extraWords.forEach(extra => {files.push(`${extra.toLowerCase()}.mp3`);});
+
+  await playFilesSequential(files);
+}
+
+export async function playPilotReport(prefix, number, extraWords = null) {
+  if (!prefix && !number) return;
+
+  const files = []
+  const callsign = await buildCallsignSequence(prefix, number)
+
+  callsign.forEach(s => files.push(s));
+
+  if (extraWords) {
+    extraWords.forEach(extra => {
+      if (extra === null) return
+      return files.push(`${phraseToFilename(extra)}.mp3`);
+    });
+  }
 
   console.log(files)
   await playFilesSequential(files);

@@ -1,5 +1,5 @@
 import { globals } from './globals.js';
-import { setAudioBasePath, buildCallsignSequence, playPilotConfirm, stopPlayback } from './pilotReply.js';
+import { setAudioBasePath, buildCallsignSequence, playPilotConfirm, stopPlayback, playPilotReport } from './pilotReply.js';
 import { airlinePrefixes, callsignAliasesJoined } from './callsignAliases.js';
 
 // =====================
@@ -221,6 +221,7 @@ function checkSTCA(planes) {
       if (distance < STCA_RADIUS && a.flightLevel === b.flightLevel) {
         a.stca = true;
         b.stca = true;
+        //playPilotReport(a.callsignPrefix, a.callsignNum, ['traffic_on_TCAS'])
       }
     }
   }
@@ -252,6 +253,7 @@ class Plane {
     this.landing = false;
     this.landed = false;
     this.bankAngle = 25; // degrees
+    this.turnSide = null
 
     // Flight strip field
     const callsignData = this.generateCallsign();
@@ -288,20 +290,32 @@ class Plane {
   }
 
   updateAltitude(delta) {
-  const vertSpeedFpm = this.targetAltitude > this.altitude ? this.maxClimbRate : this.maxDescentRate;
-  
-  // переводим delta (секунды) и FPM в футы за кадр
-  const vertSpeedFpf = vertSpeedFpm * (delta / 60);
+    const vertSpeedFpm = this.targetAltitude > this.altitude ? this.maxClimbRate : this.maxDescentRate;
+    
+    // переводим delta (секунды) и FPM в футы за кадр
+    const vertSpeedFpf = vertSpeedFpm * (delta / 60);
 
-  if (Math.abs(this.targetAltitude - this.altitude) <= vertSpeedFpf) {
-    this.altitude = this.targetAltitude;
-  } else if (this.targetAltitude > this.altitude) {
-    this.altitude += vertSpeedFpf;
-  } else {
-    this.altitude -= vertSpeedFpf;
-  }
-  // синхронизируем FL
-  this.flightLevel = Math.round(this.altitude / 100);
+    if (Math.abs(this.targetAltitude - this.altitude) <= vertSpeedFpf) {
+      this.altitude = this.targetAltitude;
+
+      // ====== for voice responce, make function then =======
+      const confirmMessage = { 
+        pref : this.callsignPrefix,
+        num : this.callsignNum, 
+        extra : ['flight_level', Math.round(this.altitude / 100).toString().split('')].flat(),
+      };
+      playPilotReport(confirmMessage.pref, confirmMessage.num, confirmMessage.extra)
+
+      //======================================================
+
+
+    } else if (this.targetAltitude > this.altitude) {
+      this.altitude += vertSpeedFpf;
+    } else {
+      this.altitude -= vertSpeedFpf;
+    }
+    // синхронизируем FL
+    this.flightLevel = Math.round(this.altitude / 100);
   }
 
   updateSpeed(delta) {
@@ -310,6 +324,17 @@ class Plane {
 
     if (Math.abs(deltaSpeed) <= maxDelta) {
       this.groundSpeed = this.targetSpeed; // достигли цели
+
+      // ====== for voice responce, make function then =======
+      const confirmMessage = { 
+        pref : this.callsignPrefix,
+        num : this.callsignNum, 
+        extra : ['speed', this.groundSpeed.toString().split(''), 'kilometers per hour'].flat(),
+      };
+      playPilotReport(confirmMessage.pref, confirmMessage.num, confirmMessage.extra)
+
+      //======================================================
+
     } else {
       this.groundSpeed += Math.sign(deltaSpeed) * maxDelta; // увеличиваем или уменьшаем
     }
@@ -323,7 +348,7 @@ class Plane {
   turn(delta) {
     const roundedAngle = Math.round((this.angle + 360) % 360);
     const roundedSetAngle = Math.round((this.setAngle + 360) % 360);
-    let direction = null;
+    //let direction = this.turnSide;
 
     let angleDifference = roundedSetAngle - roundedAngle;
 
@@ -336,15 +361,15 @@ class Plane {
     }
 
     if (angleDifference > 0) {
-        direction = 'right';
+        this.turnSide = 'right';
     } else if (angleDifference < 0) {
-        direction = 'left';
+        this.turnSide = 'left';
     }
 
     const turnRate = this.calcMaxAngularSpeed(); // degrees per second
 
     if (Math.abs(angleDifference) > 0.5) {
-      if (direction === 'right') {
+      if (this.turnSide === 'right') {
           this.angle = (this.angle + turnRate * delta) % 360;
       } else {
           this.angle = (this.angle - turnRate * delta + 360) % 360; 
@@ -353,8 +378,20 @@ class Plane {
     
     if (Math.abs(angleDifference) <= turnRate * delta) { // snap to target if within this frame's turn amount
       this.angle = this.setAngle;
+      this.turnSide = null;
+
+      // ====== for voice responce, make function then =======
+      const confirmMessage = { 
+        pref : this.callsignPrefix,
+        num : this.callsignNum, 
+        extra : ['heading', this.angle.toString().padStart(3, '0').split('')].flat(),
+      };
+      playPilotReport(confirmMessage.pref, confirmMessage.num, confirmMessage.extra)
+
+      //======================================================
+
     }
-    //console.log(`this.setAngle: ${this.setAngle}, this.angle: ${this.angle}, angleDifference: ${angleDifference}, direction: ${direction}, turnRate: ${turnRate}`);
+    //console.log(`this.setAngle: ${this.setAngle}, this.angle: ${this.angle}, angleDifference: ${angleDifference}, direction: ${this.turnSide}, turnRate: ${turnRate}`);
   }
 
   calcTurningRadius() {
@@ -554,13 +591,11 @@ ui.canvas.addEventListener('click', e => {
       selectedPlane = p;
       globals.selectedPlane = p;
       console.log(`Selected plane: ${p.callsign}, company: ${p.airline}, heading ${p.angle}°, speed ${p.groundSpeed} km/h, altitude ${p.altitude} ft`); // delete after testing
-      let maxAngularSpeed = p.calcMaxAngularSpeed(); // delete after testing
+      // let maxAngularSpeed = p.calcMaxAngularSpeed(); // delete after testing
       //console.log(`Max angular speed for ${p.callsign}: ${maxAngularSpeed.toFixed(2)} deg/sec`); // delete after testing
       updatePlaneInfo(p);
 
-      playPilotConfirm(p.callsignPrefix, p.callsignNum).catch(err => {
-        console.error(`Error playing callsign callout for ${p.callsign}: ${err.message}`);
-      });
+
 
       break;
     }
@@ -576,6 +611,41 @@ document.addEventListener('click', e => {
     if (!isNaN(newAngle) && newAngle >= 0 && newAngle < 360) {
       selectedPlane.setAngle = newAngle;
       updatePlaneInfo(selectedPlane);
+
+      //for voice responce, make function in the future========
+      const roundedAngle = Math.round((selectedPlane.angle + 360) % 360);
+      const roundedSetAngle = Math.round((selectedPlane.setAngle + 360) % 360);
+      let angleDifference = roundedSetAngle - roundedAngle;
+      // normalize [-180, 180]
+      while (angleDifference <= -180) {
+          angleDifference += 360;
+      }
+      while (angleDifference > 180) {
+          angleDifference -= 360;
+      }
+      let turnSide = null
+      if (angleDifference > 0) {
+          turnSide = 'right';
+      } else if (angleDifference < 0) {
+          turnSide = 'left';
+      }
+
+      let affirmWord = 'wilco'
+      console.log(selectedPlane.turnSide)
+      if (turnSide === 'right') {
+        affirmWord = 'turning right';
+      } else if (turnSide === 'left') {
+        affirmWord = 'turning left';
+      } else {
+        affirmWord = null;
+      }
+      const confirmMessage = { 
+        pref : selectedPlane.callsignPrefix,
+        num : selectedPlane.callsignNum, 
+        extra : [affirmWord, 'heading', newAngle.toString().padStart(3, '0').split('')].flat(),
+      };
+      playPilotConfirm(confirmMessage.pref, confirmMessage.num, confirmMessage.extra)
+    //====================
     }
   }
 
@@ -587,6 +657,25 @@ document.addEventListener('click', e => {
     if (!isNaN(newFL) && newFL >= 0 && newFL <= 660) {
       selectedPlane.targetAltitude = newFL * 100;
       updatePlaneInfo(selectedPlane);
+
+      //for voice responce, make function in the future
+      let affirmWord = 'wilco'
+      if (selectedPlane.altitude < selectedPlane.targetAltitude) {
+        affirmWord = 'climbing flight level';
+      } else if (selectedPlane.altitude > selectedPlane.targetAltitude) {
+        affirmWord = 'descending flight level';
+      } else {
+        affirmWord = 'flight level';
+      }
+      const confirmMessage = { 
+        pref : selectedPlane.callsignPrefix,
+        num : selectedPlane.callsignNum, 
+        extra : [affirmWord, newFL.toString().split('')].flat(),
+      };
+      console.log('here')
+      playPilotConfirm(confirmMessage.pref, confirmMessage.num, confirmMessage.extra)
+    //====================
+
     }
   }
 
@@ -602,6 +691,17 @@ document.addEventListener('click', e => {
 
       selectedPlane.targetSpeed = newSpeed;
       updatePlaneInfo(selectedPlane);
+
+      //for voice responce, make function in the future
+      let affirmWord = 'wilco'
+      const confirmMessage = { 
+        pref : selectedPlane.callsignPrefix,
+        num : selectedPlane.callsignNum, 
+        extra : [affirmWord, newSpeed.toString().split(''), 'kilometers per hour'].flat(),
+      };
+      playPilotConfirm(confirmMessage.pref, confirmMessage.num, confirmMessage.extra)
+    //====================
+
     }
   }
 });
