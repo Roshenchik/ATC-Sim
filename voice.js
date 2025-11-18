@@ -101,7 +101,7 @@ if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
   };
 
   recognition.onerror = (event) => {
-    console.warn("Speech recognition error:", event.error);
+    //console.warn("Speech recognition error:", event.error); uncoment then
   };
 
   recognition.onend = () => {

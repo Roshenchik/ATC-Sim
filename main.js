@@ -1,4 +1,6 @@
 import { globals } from './globals.js';
+import { setAudioBasePath, buildCallsignSequence, playPilotConfirm, stopPlayback } from './pilotReply.js';
+import { airlinePrefixes, callsignAliasesJoined } from './callsignAliases.js';
 
 // =====================
 // ====== CONSTANTS ======
@@ -251,8 +253,12 @@ class Plane {
     this.landed = false;
     this.bankAngle = 25; // degrees
 
-    // Flight strip fields
-    this.callsign = this.generateCallsign();
+    // Flight strip field
+    const callsignData = this.generateCallsign();
+    this.callsignPrefix = callsignData.prefix;
+    this.callsignNum = callsignData.number;
+    this.callsign = callsignData.prefix + callsignData.number;
+    this.airline = airlinePrefixes[callsignData.prefix] || callsignData.prefix;; // заменяем на алиас, если есть
     const possibleFlightLevels = [290, 300, 310, 320, 330, 340, 350, 360];
     this.flightLevel = possibleFlightLevels[Math.floor(Math.random() * possibleFlightLevels.length)];
     this.altitude = this.flightLevel * 100; // feet
@@ -268,9 +274,10 @@ class Plane {
   // ======== LOGIC METHODS ========
 
   generateCallsign() {
-    const airline = AIRLINES[Math.floor(Math.random() * AIRLINES.length)];
-    const num = Math.floor(100 + Math.random() * 900);
-    return airline + num;
+    const callsign = { prefix: null, number: null}
+    callsign.prefix = AIRLINES[Math.floor(Math.random() * AIRLINES.length)];
+    callsign.number = Math.floor(100 + Math.random() * 900).toString();
+    return callsign;
   }
 
   // Update position for straight flight
@@ -402,7 +409,7 @@ class Plane {
     }
 
     if (this.targetAltitude !== this.altitude) {
-    this.updateAltitude(delta);
+      this.updateAltitude(delta);
     }
 
     if (this.targetSpeed !== this.groundSpeed) {
@@ -546,10 +553,15 @@ ui.canvas.addEventListener('click', e => {
       p.selected = true;
       selectedPlane = p;
       globals.selectedPlane = p;
-      console.log(`Selected plane: ${p.callsign}, heading ${p.angle}°, speed ${p.groundSpeed} km/h, altitude ${p.altitude} ft`); // delete after testing
+      console.log(`Selected plane: ${p.callsign}, company: ${p.airline}, heading ${p.angle}°, speed ${p.groundSpeed} km/h, altitude ${p.altitude} ft`); // delete after testing
       let maxAngularSpeed = p.calcMaxAngularSpeed(); // delete after testing
       //console.log(`Max angular speed for ${p.callsign}: ${maxAngularSpeed.toFixed(2)} deg/sec`); // delete after testing
       updatePlaneInfo(p);
+
+      playPilotConfirm(p.callsignPrefix, p.callsignNum).catch(err => {
+        console.error(`Error playing callsign callout for ${p.callsign}: ${err.message}`);
+      });
+
       break;
     }
   }

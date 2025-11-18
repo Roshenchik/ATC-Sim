@@ -1,3 +1,4 @@
+  //for voice detection
  const callsignAliases = {
   "ALASKA AIRLINES": "ASA",
   "ALASKA": "ASA",
@@ -22,6 +23,7 @@
   "AIR INDIA": "AIC",
   "INDIA": "AIC",
 
+  "AEROFLOT": "AFL",
   "AIR FLOAT": "AFL",
   "AIRFLOW": "AFL",
   "AIRPORT": "AFL",
@@ -124,9 +126,6 @@
   "WESTJET": "WJA",
   "WESTJET AIRLINES": "WJA"
 };
-
-//killometers per hour, knots, mach number
-
 function normalizeCallsign(str) {
   return str.toUpperCase().replace(/[\s\-.,]/g, '');
 }
@@ -134,3 +133,50 @@ export const callsignAliasesJoined = {};
 for (const [k, v] of Object.entries(callsignAliases)) {
   callsignAliasesJoined[normalizeCallsign(k)] = v;
 }
+
+//for finding fullnames
+export const airlinePrefixes = { 
+    "6E": "Indigo",
+    "AAL": "American",
+    "ACA": "Canada",
+    "AFR": "Air France",
+    "AFL": "Aeroflot",
+    "AIC": "India",
+    "ANA": "Ana All Nippon Airways",
+    "ASA": "Alaska",
+    "AZA": "Alitalia",
+    "BAW": "Speed Bird",
+    "BRU": "Belavia",
+    "CAL": "China Air",
+    "CCA": "Air China",
+    "CES": "China Eastern",
+    "CHH": "Hainan",
+    "CRK": "Hong Kong",
+    "CSN": "China Southern",
+    "DAL": "Delta",
+    "DLH": "Lufthansa",
+    "ETD": "Etihad",
+    "EZY": "Easyjet",
+    "FIN": "Finnair",
+    "JAL": "Japan",
+    "JBU": "Jetblue",
+    "KLM": "Klm",
+    "LAN": "Latam",
+    "NAX": "Norwegian",
+    "NKS": "Spirit",
+    "QFA": "Qantas",
+    "QTR": "Qatar",
+    "RYR": "Ryanair",
+    "SAA": "South African",
+    "SAS": "Scandinavian",
+    "SIA": "Singapore",
+    "SWA": "Southwest",
+    "TAP": "Tap Air Portugal",
+    "THY": "Turkish",
+    "UAL": "United",
+    "UAE": "Emirates",
+    "VIR": "Virgin",
+    "WJA": "Westjet",
+};
+
+
