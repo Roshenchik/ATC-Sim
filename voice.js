@@ -1,4 +1,5 @@
 import { globals } from './globals.js'; // planes, selectedPlane, updatePlaneInfo
+import { confirmAltitudeChange, confirmHeadingChange, confirmSpeedChange } from './pilotReplyAudioApi.js';
 
 const planes = globals.planes;
 let selectedPlane = globals.selectedPlane;
@@ -190,6 +191,7 @@ function setHeading(words, selectedPlane, updatePlaneInfo) {
   if (heading !== null && heading >= 0 && heading < 360) {
     selectedPlane.setAngle = heading;
     updatePlaneInfo(selectedPlane);
+    confirmHeadingChange(selectedPlane, heading)
     console.log(`✅ HEADING ${heading}° for ${selectedPlane.callsign}`);
   } else console.warn("⚠️ Invalid heading:", heading);
 }
@@ -208,6 +210,7 @@ function setAltitude(words, selectedPlane, updatePlaneInfo, type) {
   if (altitude !== null && altitude >= 0 && altitude < cfg.max) {
     selectedPlane.targetAltitude = altitude * cfg.factor;
     updatePlaneInfo(selectedPlane);
+    confirmAltitudeChange(selectedPlane, (altitude * cfg.factor))
     console.log(`✅ Set ${cfg.unit} ${altitude} for ${selectedPlane.callsign}`);
   } else {
     console.warn("⚠️ Invalid altitude:", altitude);
@@ -221,6 +224,7 @@ function setSpeed(words, selectedPlane, updatePlaneInfo) {
   if (speed !== null && speed >= globals.MIN_SPEED_KPH && speed < globals.MAX_SPEED_KPH) {
     selectedPlane.targetSpeed = speed;
     updatePlaneInfo(selectedPlane);
+    confirmSpeedChange(selectedPlane, speed)
     console.log(`✅ SPEED ${speed} km/h for ${selectedPlane.callsign}`);
   } else console.warn("⚠️ Invalid speed:", speed);
 }

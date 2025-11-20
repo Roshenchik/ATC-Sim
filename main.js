@@ -8,7 +8,7 @@ import {
   sayReachedAltitude, 
   sayReachedHeading, 
   sayReachedSpeed
-} from './pilotReply.js';
+} from './pilotReplyAudioApi.js';
 import { airlinePrefixes, callsignAliasesJoined } from './callsignAliases.js';
 
 // =====================
