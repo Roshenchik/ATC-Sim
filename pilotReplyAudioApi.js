@@ -378,6 +378,15 @@ export function sayReachedSpeed(plane) {
   enqueuePilotMessage(plane.callsignPrefix, plane.callsignNum, report, type);
 }
 
+export function reportTcasAlarm(planeA, planeB) {
+  console.log('here')
+  if (!planeA.stca) return;
+  console.log('here2')
+  const type = 'report'
+  const report = ['traffic on TCAS'].flat();
+  enqueuePilotMessage(planeA.callsignPrefix, planeA.callsignNum, report, type);
+}
+
 // Предзагрузим автоматически (по желанию) — можно закомментировать, если не нужен автозапуск
 // (await preloadAssets();) // НЕ вызывать на уровне модуля без пользовательского жеста в некоторых браузерах
 await preloadAssets();

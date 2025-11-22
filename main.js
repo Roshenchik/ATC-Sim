@@ -5,7 +5,8 @@ import {
   confirmSpeedChange,
   sayReachedAltitude, 
   sayReachedHeading, 
-  sayReachedSpeed
+  sayReachedSpeed,
+  reportTcasAlarm,
 } from './pilotReplyAudioApi.js';
 import { airlinePrefixes, callsignAliasesJoined } from './callsignAliases.js';
 
@@ -18,7 +19,8 @@ const RUNWAY_LENGTH_M = 3000;
 const RUNWAY_WIDTH_M = 60;
 const FINAL_LENGTH_M = 20000;
 const FINAL_BUFFER_M = 100;
-const STCA_RADIUS_M = 10000;
+const STCA_RADIUS_M = 30000;
+const STCA_VERT_DIST_F = 300;
 const OFFSCREEN_MARGIN_M = 10000;
 const RADAR_RADIUS_M = 20000;
 const VECTOR_LENGTH_M = 5000;
@@ -224,11 +226,11 @@ function checkSTCA(planes) {
       const dy = a.y - b.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // STCA triggers when horizontal separation < threshold AND same flight level
-      if (distance < STCA_RADIUS && a.flightLevel === b.flightLevel) {
+      const isCloseHoriz = distance < STCA_RADIUS
+      const isCloseVert = Math.abs(a.altitude - b.altitude) < STCA_VERT_DIST_F
+      if (isCloseVert && isCloseHoriz) {
         a.stca = true;
         b.stca = true;
-        //playPilotReport(a.callsignPrefix, a.callsignNum, ['traffic_on_TCAS'])
       }
     }
   }
@@ -614,8 +616,6 @@ document.addEventListener('click', e => {
   }
 });
 
-
-
 // =====================
 // ====== REFRESH / STCA ======
 // =====================
@@ -669,6 +669,7 @@ for (let i = 0; i < MAX_PLANES; i++) spawnPlane();
 setInterval(spawnPlane, 2500);
 refreshDisplay();
 setInterval(refreshDisplay, RADAR_UPLOAD);
+setInterval(() => planes.forEach(reportTcasAlarm), 30000);
 
 // Start the animation loop with an initial timestamp
 gameLoop(performance.now());
