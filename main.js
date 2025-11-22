@@ -1,7 +1,5 @@
 import { globals } from './globals.js';
 import { 
-  playPilotConfirm, 
-  playPilotReport,
   confirmAltitudeChange,
   confirmHeadingChange,
   confirmSpeedChange,

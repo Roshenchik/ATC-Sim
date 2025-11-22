@@ -37,7 +37,7 @@ let basePath = DEFAULT_BASE;
 let audioCtx = null; // AudioContext (создаётся лениво при первом воспроизведении/предзагрузке)
 const bufferCache = new Map(); // Map: filename -> AudioBuffer
 
-// Список активных источников, чтобы можно было остановить воспроизведение
+// // Список активных источников, чтобы можно было остановить воспроизведение
 let activeSources = [];
 
 // playback token для логики отмены (аналог currentPlayback)
@@ -209,7 +209,7 @@ export async function playSequence(filenames, gapSeconds = 0) {
 }
 
 // Вспомогательная: строит последовательность имён файлов для callsign (как у тебя)
-export async function buildCallsignSequence(prefix, number) {
+export async function playCallsignSequence(prefix, number) {
   const fileSeq = [];
   const prefUp = (prefix || '').toUpperCase();
   const isFullName = Object.prototype.hasOwnProperty.call(airlinePrefixes, prefUp);
@@ -238,33 +238,66 @@ export async function buildCallsignSequence(prefix, number) {
 
   (number || '').split('').forEach(num => fileSeq.push(num + '.mp3'));
 
-  return fileSeq;
+  //return fileSeq;
+  await playSequence(fileSeq);
 }
 
-export async function playPilotConfirm(prefix, number, extraWords = ['wilco']) {
-  if (!prefix && !number) return;
+const confirmationQueue = [];
+let isQueueProcessing = false;
+const planeId = task => task.prefix + task.number;
+async function processConfirmationQueue() {
+  if (isQueueProcessing) return;
+  if (confirmationQueue.length === 0) return;
 
-  const files = [];
-  const callsign = await buildCallsignSequence(prefix, number);
+  isQueueProcessing = true;
 
-  if (extraWords) {
-    extraWords.forEach(extra => {
-      if (extra === null) return;
-      files.push(phraseToFilename(extra));
-    });
+  while (confirmationQueue.length > 0) {
+    const task = confirmationQueue[0];
+
+    // Обрабатываем REPORT и CONFIRM через вспомогательную функцию
+    if (task.type === "report") {
+      await processGroup("report");
+    } else if (task.type === "confirm") {
+      await processGroup("confirm");
+    }
   }
 
-  callsign.forEach(s => files.push(s));
-
-  await playSequence(files, 0);
+  isQueueProcessing = false;
 }
 
-export async function playPilotReport(prefix, number, extraWords = null) {
+// Вспомогательная функция обработки группы одного типа для одного самолета
+async function processGroup(type) {
+  if (confirmationQueue.length === 0) return;
+
+  const firstTask = confirmationQueue[0];
+  const plane = planeId(firstTask);
+
+  // Для report — сначала позывной
+  if (type === "report") {
+    await playCallsignSequence(firstTask.prefix, firstTask.number, null);
+  }
+
+  // Проигрываем все задачи этого типа для текущего самолета
+  while (confirmationQueue[0] && confirmationQueue[0].type === type && planeId(confirmationQueue[0]) === plane) {
+    const task = confirmationQueue.shift();
+    await playPilotMessage(task.prefix, task.number, task.extraWords);
+  }
+
+  // Для confirm — позывной после серии
+  if (type === "confirm") {
+    await playCallsignSequence(firstTask.prefix, firstTask.number, null);
+  }
+}
+
+export function enqueuePilotMessage(prefix, number, extraWords = ['wilco'], type) {
+  confirmationQueue.push({ prefix, number, extraWords, type });
+  processConfirmationQueue();
+}
+
+export async function playPilotMessage(prefix, number, extraWords = ['wilco']) {
   if (!prefix && !number) return;
 
   const files = [];
-  const callsign = await buildCallsignSequence(prefix, number);
-  callsign.forEach(s => files.push(s));
 
   if (extraWords) {
     extraWords.forEach(extra => {
@@ -278,6 +311,7 @@ export async function playPilotReport(prefix, number, extraWords = null) {
 
 // helper functions that use the above (взяты из твоего оригинала, немного адаптированы)
 export function confirmHeadingChange(plane, newAngle) {
+  const type = 'confirm'
   const angle = plane.angle;
   const side = plane.turnDirection(newAngle, angle);
   let nums = newAngle.toString().padStart(3, '0').split('');
@@ -292,18 +326,17 @@ export function confirmHeadingChange(plane, newAngle) {
     return;
   }
   const confirm = [affirmWord, 'heading', nums].flat();
-
-  playPilotConfirm(plane.callsignPrefix, plane.callsignNum, confirm);
+  enqueuePilotMessage(plane.callsignPrefix, plane.callsignNum, confirm, type);
 }
-
 export function sayReachedHeading(plane) {
+  const type = 'report'
   let nums = plane.angle.toString().split('');
   const report = ['heading', nums].flat();
-
-  playPilotReport(plane.callsignPrefix, plane.callsignNum, report);
+  enqueuePilotMessage(plane.callsignPrefix, plane.callsignNum, report, type);
 }
 
 export function confirmAltitudeChange(plane, newFL) {
+  const type = 'confirm'
   let nums = newFL.toString().split('');
   let affirmWord = 'wilco';
 
@@ -316,18 +349,18 @@ export function confirmAltitudeChange(plane, newFL) {
     return;
   }
   const confirm = [affirmWord, nums].flat();
-
-  playPilotConfirm(plane.callsignPrefix, plane.callsignNum, confirm);
+  enqueuePilotMessage(plane.callsignPrefix, plane.callsignNum, confirm, type);
 }
-
 export function sayReachedAltitude(plane) {
+  const type = 'report'
   let nums = plane.flightLevel.toString().split('');
   const report = ['flight level', nums].flat();
 
-  playPilotReport(plane.callsignPrefix, plane.callsignNum, report);
+  enqueuePilotMessage(plane.callsignPrefix, plane.callsignNum, report, type);
 }
 
 export function confirmSpeedChange(plane, newSpeed) {
+  const type = 'confirm'
   if (plane.groundSpeed == newSpeed) {
     sayReachedSpeed(plane);
     return;
@@ -336,14 +369,15 @@ export function confirmSpeedChange(plane, newSpeed) {
   let nums = newSpeed.toString().split('');
   let affirmWord = 'wilco';
   const confirm = [affirmWord, nums, 'kilometers per hour'].flat();
-  playPilotConfirm(plane.callsignPrefix, plane.callsignNum, confirm);
+  enqueuePilotMessage(plane.callsignPrefix, plane.callsignNum, confirm, type);
 }
-
 export function sayReachedSpeed(plane) {
+  const type = 'report'
   let nums = plane.groundSpeed.toString().split('');
   const report = ['speed', nums, 'kilometers per hour'].flat();
-  playPilotReport(plane.callsignPrefix, plane.callsignNum, report);
+  enqueuePilotMessage(plane.callsignPrefix, plane.callsignNum, report, type);
 }
 
 // Предзагрузим автоматически (по желанию) — можно закомментировать, если не нужен автозапуск
 // (await preloadAssets();) // НЕ вызывать на уровне модуля без пользовательского жеста в некоторых браузерах
+await preloadAssets();
