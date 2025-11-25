@@ -7,8 +7,8 @@ import {
   sayReachedHeading, 
   sayReachedSpeed,
   reportTcasAlarm,
-} from './pilotReplyAudioApi.js';
-import { airlinePrefixes, callsignAliasesJoined } from './callsignAliases.js';
+} from '../pilotReplyAudioApi.js';
+import { airlinePrefixes, callsignAliasesJoined } from '../callsignAliases.js';
 
 // =====================
 // ====== CONSTANTS ======

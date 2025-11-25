@@ -2,7 +2,7 @@
 // Usage:
 // import { setAudioBasePath, preloadAll, buildCallsignSequence, playPilotConfirm, stopPlayback } from './pilotReply.js'
 
-import { airlinePrefixes } from './callsignAliases.js';
+import { airlinePrefixes } from '../callsignAliases.js';
 
 const phraseList = [
   // Vertical movement

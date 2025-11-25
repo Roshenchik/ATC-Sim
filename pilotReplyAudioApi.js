@@ -9,18 +9,22 @@ const phraseList = [
   "DESCENDING TO ALTITUDE",
   "FEET",
   "FLIGHT LEVEL",
+
   "HEADING",
   "TURNING RIGHT",
   "TURNING LEFT",
+
   "SPEED",
   "KILOMETERS PER HOUR",
   "KNOTS",
   "MACH NUMBER",
+
   "READY TO LAND",
   "GOING AROUND",
   "TRAFFIC ON TCAS",
   "TRAFFIC IN SIGHT",
   "WILCO",
+
   "AEROFLOT",
   "FINNAIR",
   "KLM",
@@ -309,12 +313,12 @@ export async function playPilotMessage(prefix, number, extraWords = ['wilco']) {
   await playSequence(files, 0);
 }
 
-// helper functions that use the above (взяты из твоего оригинала, немного адаптированы)
-export function confirmHeadingChange(plane, newAngle) {
+// helper functions that use the above
+export function confirmHeadingChange(plane, newHeading) {
   const type = 'confirm'
-  const angle = plane.angle;
-  const side = plane.turnDirection(newAngle, angle);
-  let nums = newAngle.toString().padStart(3, '0').split('');
+  const crntHeading = plane.heading;
+  const side = plane.turnDirection(newHeading, crntHeading);
+  let nums = newHeading.toString().padStart(3, '0').split('');
   let affirmWord = 'wilco';
 
   if (side > 0) {
@@ -330,7 +334,7 @@ export function confirmHeadingChange(plane, newAngle) {
 }
 export function sayReachedHeading(plane) {
   const type = 'report'
-  let nums = plane.angle.toString().split('');
+  let nums = plane.heading.toString().split('');
   const report = ['heading', nums].flat();
   enqueuePilotMessage(plane.callsignPrefix, plane.callsignNum, report, type);
 }

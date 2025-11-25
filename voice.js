@@ -1,9 +1,8 @@
-import { globals } from './globals.js'; // planes, selectedPlane, updatePlaneInfo
 import { confirmAltitudeChange, confirmHeadingChange, confirmSpeedChange } from './pilotReplyAudioApi.js';
-
-const planes = globals.planes;
-let selectedPlane = globals.selectedPlane;
-const updatePlaneInfo = globals.updatePlaneInfo;
+import { getPlanes } from './planesManager.js';
+import { getSelectedPlane, setSelectedPlane, unsetSelectedPlane, updatePlaneInfo } from './ui.js';
+import { MAX_SPEED_KPH, MIN_SPEED_KPH } from './constants.js';
+import { callsignAliasesJoined } from './callsignAliases.js';
 
   const natoMap = {
     ALFA: "A", ALPHA: "A",
@@ -39,22 +38,23 @@ const updatePlaneInfo = globals.updatePlaneInfo;
     NINER: "9"
   };
 
-  import { callsignAliasesJoined } from './callsignAliases.js';
-
-
 // =======================
 // === VOICE CONTROL ====
 // =======================
+let recognition = null;
 
-if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-  console.warn("Speech Recognition API not supported in this browser.");
-} else {
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const recognition = new SpeechRecognition();
+  recognition = new SpeechRecognition();
 
   recognition.lang = 'en-US';
   recognition.continuous = true;
   recognition.interimResults = false;
+} else {
+  console.warn("Speech Recognition API not supported in this browser.");
+}
+
+if(recognition) {
 
   recognition.onresult = (event) => {
     const raw = event.results[event.results.length - 1][0].transcript.trim().toUpperCase();
@@ -65,16 +65,19 @@ if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
     const { callsign, rest } = extractCallsign(workingText);
     console.log("📡 Parsed callsign:", callsign, "| Rest:", rest);
 
+    const planes = getPlanes();
+    unsetSelectedPlane(planes);
     if (!callsign) return;
 
     // Ищем совпадение с позывным в списке самолётов
     const plane = planes.find(p => p.callsign === callsign);
-    if (plane) {
-      selectPlaneByVoice(plane);
-      console.log(`🎯 Selected via voice: ${plane.callsign}`);
-    } else {
+    if (!plane) {
       console.warn(`No plane found with callsign: ${callsign}`);
+      return;
     }
+
+    setSelectedPlane(plane);
+    console.log(`🎯 Selected via voice: ${plane.callsign}`);
 
     const commands = parseCommands(rest);
     if (commands.length === 0) {
@@ -83,17 +86,20 @@ if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       console.log(`📝 Found ${commands.length} command(s):`, commands.map(c => c.type).join("; "));
     }
 
+    const selectedPlane = getSelectedPlane();
+    if (!selectedPlane) return;
+
     commands.forEach(cmd => {
       switch (cmd.type) {
         case "HEADING":
-          setHeading(cmd.words, selectedPlane, updatePlaneInfo);
+          setHeading(cmd.words, selectedPlane);
           break;
         case "SPEED":
-          setSpeed(cmd.words, selectedPlane, updatePlaneInfo);
+          setSpeed(cmd.words, selectedPlane);
           break;
         case "LEVEL":
         case "ALTITUDE":
-          setAltitude(cmd.words, selectedPlane, updatePlaneInfo, cmd.type);
+          setAltitude(cmd.words, selectedPlane, cmd.type);
           break;
         default:
           console.log("⚙️ Unknown command type:", cmd.type);
@@ -113,17 +119,6 @@ if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
 }
 
 // =======================
-// === SELECT PLANE ====
-// =======================
-function selectPlaneByVoice(plane) {
-  planes.forEach(p => p.selected = false);
-  plane.selected = true;
-  globals.selectedPlane = plane;
-  selectedPlane = plane;
-  if (updatePlaneInfo) updatePlaneInfo(plane);
-}
-
-// =======================
 // === PARSE CALLSIGN ===
 // =======================
 function extractCallsign(text) {
@@ -131,30 +126,37 @@ function extractCallsign(text) {
 
   const words = text.trim().toUpperCase().split(/\s+/);
 
-  let airlineLetters = "";
+  // ===== 1. Конвертируем каждое слово из NATO → буква, или оставляем как есть
+  const normalized = words.map(w => natoMap[w] || w);
+
+  // ===== 2. Ищем индекс, где начинаются цифры
+  let digitStart = normalized.findIndex(w => numMap[w] || /\d/.test(w));
+  if (digitStart === -1) digitStart = normalized.length;
+
+  // ===== 3. Авиакомпания = все буквы до цифр
+  const airlineLettersRaw = normalized.slice(0, digitStart).join("");
+
+  // применяем алиас, если есть
+  const airlineLetters = callsignAliasesJoined[airlineLettersRaw] || airlineLettersRaw;
+
+  // ===== 4. Номер рейса = все цифры после букв
   let flightNumbers = "";
-  let i = 0;
-
-  // === собираем буквы (включая нато) до первой цифры ===
-  while (i < words.length && (natoMap[words[i]] || /^[A-Z]+$/.test(words[i]))) {
-    airlineLetters += natoMap[words[i]] || words[i];
-    i++;
-    if (i < words.length && (numMap[words[i]] || /\d/.test(words[i]))) break;
-  }
-  airlineLetters = callsignAliasesJoined[airlineLetters] || airlineLetters; // заменяем на алиас, если есть
-
-  // === собираем цифры ===
-  while (i < words.length && (numMap[words[i]] || /\d/.test(words[i]))) {
-    flightNumbers += numMap[words[i]] || words[i];
-    i++;
+  for (let i = digitStart; i < normalized.length; i++) {
+    const w = normalized[i];
+    if (numMap[w]) flightNumbers += numMap[w];
+    else if (/^\d+$/.test(w)) flightNumbers += w;
+    else break; // закончили цифры
   }
 
-  const callsign = airlineLetters + flightNumbers;
-  const rest = words.slice(i).join(" ");
+  // ===== 5. Остаток текста
+  const restIndex = digitStart + flightNumbers.length;
+  const rest = words.slice(restIndex).join(" ");
 
-  return { callsign, rest };
+  return {
+    callsign: airlineLetters + flightNumbers,
+    rest
+  };
 }
-
 
 function parseCommands(restText) {
   const commandKeys = ["HEADING", "SPEED", "LEVEL", "ALTITUDE"];
@@ -164,7 +166,7 @@ function parseCommands(restText) {
   //console.log("🧩 parseCommands(): входные слова →", words);
 
   for (let i = 0; i < words.length; i++) {
-    const word = words[i].toUpperCase();
+    const word = words[i];
 
     if (commandKeys.includes(word)) {
       const type = word;
@@ -185,18 +187,17 @@ function parseCommands(restText) {
   return commands;
 }
 
-function setHeading(words, selectedPlane, updatePlaneInfo) {
+function setHeading(words, selectedPlane ) {
   if (!selectedPlane) return;
-  const heading = convertWordsToDigits(words) % 360;
+  const heading = convertWordsToDigits(words);
   if (heading !== null && heading >= 0 && heading < 360) {
-    selectedPlane.setAngle = heading;
-    updatePlaneInfo(selectedPlane);
+    selectedPlane.targetHeading = heading;
     confirmHeadingChange(selectedPlane, heading)
     console.log(`✅ HEADING ${heading}° for ${selectedPlane.callsign}`);
   } else console.warn("⚠️ Invalid heading:", heading);
 }
 
-function setAltitude(words, selectedPlane, updatePlaneInfo, type) {
+function setAltitude(words, selectedPlane, type) {
 
   const types = {
     LEVEL: { max: 660, factor: 100, unit: "FL" },
@@ -209,21 +210,21 @@ function setAltitude(words, selectedPlane, updatePlaneInfo, type) {
   const altitude = convertWordsToDigits(words);
   if (altitude !== null && altitude >= 0 && altitude < cfg.max) {
     selectedPlane.targetAltitude = altitude * cfg.factor;
-    updatePlaneInfo(selectedPlane);
-    confirmAltitudeChange(selectedPlane, (altitude * cfg.factor))
+
+    confirmAltitudeChange(selectedPlane, (altitude))
     console.log(`✅ Set ${cfg.unit} ${altitude} for ${selectedPlane.callsign}`);
   } else {
     console.warn("⚠️ Invalid altitude:", altitude);
   }
 }
 
-function setSpeed(words, selectedPlane, updatePlaneInfo) {
+function setSpeed(words, selectedPlane) {
 
   if (!selectedPlane) return;
   const speed = convertWordsToDigits(words);
-  if (speed !== null && speed >= globals.MIN_SPEED_KPH && speed < globals.MAX_SPEED_KPH) {
+  if (speed !== null && speed >= MIN_SPEED_KPH && speed < MAX_SPEED_KPH) {
     selectedPlane.targetSpeed = speed;
-    updatePlaneInfo(selectedPlane);
+
     confirmSpeedChange(selectedPlane, speed)
     console.log(`✅ SPEED ${speed} km/h for ${selectedPlane.callsign}`);
   } else console.warn("⚠️ Invalid speed:", speed);
@@ -232,8 +233,8 @@ function setSpeed(words, selectedPlane, updatePlaneInfo) {
 function convertWordsToDigits(wordsArray) {
   if (!Array.isArray(wordsArray)) return null;
   let result = "";
-  for (const word of wordsArray) {
-     word.replace(/[.,]/g, ""); // удаляем запятые и точки
+  for (let word of wordsArray) {
+     word = word.replace(/[.,]/g, ""); // удаляем запятые и точки
 
     if (numMap[word]) {
       result += numMap[word]; // NATO слово → цифра

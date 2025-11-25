@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="./styles.css" />
 
     <!-- preload the module for faster startup -->
-    <link rel="modulepreload" href="./main.js" />
+    <link rel="modulepreload" href="./main copy.js" />
 </head>
 <body>
     <div class="game-container">
@@ -29,9 +29,9 @@
                     min="0"
                     max="359"
                     placeholder="Курс (°)"
-                    data-element="course-input"
+                    data-element="heading-input"
                 />
-                <button data-action="set-course">Set heading</button>
+                <button data-action="set-heading">Set heading</button>
                 <input
                     type="number"
                     min="0"
@@ -55,9 +55,9 @@
     </div>
 
     <!-- application script as an ES module -->
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./main copy.js"></script>
     <script type="module" src="./voice.js"></script>
-    <script type="module" src="./pilotReply.js"></script>
-    <script type="module" src="./pilotReplyAudioApi.js"></script>
+    <!-- <script type="module" src="./pilotReply.js"></script> -->
+    <!-- <script type="module" src="./pilotReplyAudioApi.js"></script> -->
 </body>
 </html>
