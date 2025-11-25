@@ -10,6 +10,7 @@ export const ui = {
   headingInput: document.querySelector('[data-element="heading-input"]'),
   altitudeInput: document.querySelector('[data-element="flightlevel-input"]'),
   speedInput: document.querySelector('[data-element="speed-input"]'),
+  pttLightElement: document.querySelector('[data-element="ptt-light"]'),
 };
 
 export const ctx = ui.canvas.getContext('2d');
@@ -110,6 +111,11 @@ export function handleDocumentClick(event) {
     updatePlaneInfo(selectedPlane);
     confirmSpeedChange(selectedPlane, newSpeed);
   }
+}
+
+export function setPttActive(active) {
+  if (!ui.pttLightElement) return;
+  ui.pttLightElement.classList.toggle("active", active);
 }
 
 // =====================

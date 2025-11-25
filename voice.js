@@ -1,7 +1,7 @@
 import { confirmAltitudeChange, confirmHeadingChange, confirmSpeedChange } from './pilotReplyAudioApi.js';
 import { getPlanes } from './planesManager.js';
-import { getSelectedPlane, setSelectedPlane, unsetSelectedPlane, updatePlaneInfo } from './ui.js';
-import { MAX_SPEED_KPH, MIN_SPEED_KPH } from './constants.js';
+import { getSelectedPlane, setSelectedPlane, unsetSelectedPlane, setPttActive } from './ui.js';
+import { MAX_SPEED_KPH, MIN_SPEED_KPH, PTT_BUTTON } from './constants.js';
 import { callsignAliasesJoined } from './callsignAliases.js';
 
   const natoMap = {
@@ -42,6 +42,8 @@ import { callsignAliasesJoined } from './callsignAliases.js';
 // === VOICE CONTROL ====
 // =======================
 let recognition = null;
+let pttActive = false; // push-to-talk active
+let allowRestart = false; // блокируем автоперезапуск
 
 if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -112,11 +114,45 @@ if(recognition) {
   };
 
   recognition.onend = () => {
-    recognition.start(); // автоперезапуск
+    if (allowRestart) {
+      recognition.start();
+    }
   };
-
-  recognition.start();
 }
+
+// push-to-talk: SPACE
+window.addEventListener("keydown", (e) => {
+  if (e.code === PTT_BUTTON && !pttActive) {
+    pttActive = true;
+    allowRestart = true;
+    console.log("🎙 START LISTENING (PTT)");
+
+    try {
+      recognition.start();
+    } catch (err) {
+      if (err.name !== "InvalidStateError") throw err;
+    }
+
+    setPttActive(true);;
+    e.preventDefault();
+  }
+});
+
+window.addEventListener("keyup", (e) => {
+  if (e.code === PTT_BUTTON && pttActive) {
+    pttActive = false;
+    allowRestart = false;
+
+    try {
+      recognition.stop();
+    } catch (err) {
+      if (err.name !== "InvalidStateError") throw err;
+    }
+    
+    setPttActive(false); // гаснет лампочка
+    e.preventDefault();
+  }
+});
 
 // =======================
 // === PARSE CALLSIGN ===
@@ -125,32 +161,59 @@ function extractCallsign(text) {
   if (!text) return { callsign: "", rest: "" };
 
   const words = text.trim().toUpperCase().split(/\s+/);
-
-  // ===== 1. Конвертируем каждое слово из NATO → буква, или оставляем как есть
-  const normalized = words.map(w => natoMap[w] || w);
-
-  // ===== 2. Ищем индекс, где начинаются цифры
-  let digitStart = normalized.findIndex(w => numMap[w] || /\d/.test(w));
-  if (digitStart === -1) digitStart = normalized.length;
-
-  // ===== 3. Авиакомпания = все буквы до цифр
-  const airlineLettersRaw = normalized.slice(0, digitStart).join("");
-
-  // применяем алиас, если есть
-  const airlineLetters = callsignAliasesJoined[airlineLettersRaw] || airlineLettersRaw;
-
-  // ===== 4. Номер рейса = все цифры после букв
+  let airlineLetters = "";
   let flightNumbers = "";
-  for (let i = digitStart; i < normalized.length; i++) {
-    const w = normalized[i];
-    if (numMap[w]) flightNumbers += numMap[w];
-    else if (/^\d+$/.test(w)) flightNumbers += w;
-    else break; // закончили цифры
+  let i = 0;
+
+  // === 1. Собираем буквы (включая NATO), пока не встретили цифру ===
+  while (i < words.length) {
+    const w = words[i];
+
+    // Если слово — NATO буква → конвертируем
+    if (natoMap[w]) {
+      airlineLetters += natoMap[w];
+      i++;
+      // дальше может быть цифра — тогда выходим
+      if (i < words.length && (numMap[words[i]] || /\d/.test(words[i]))) break;
+      continue;
+    }
+
+    // Если обычные буквы (авиакомпания)
+    if (/^[A-Z]+$/.test(w)) {
+      airlineLetters += w;
+      i++;
+      // снова проверяем, не начинается ли номер рейса
+      if (i < words.length && (numMap[words[i]] || /\d/.test(words[i]))) break;
+      continue;
+    }
+
+    break; // встретили что-то не буквы → выходим
   }
 
-  // ===== 5. Остаток текста
-  const restIndex = digitStart + flightNumbers.length;
-  const rest = words.slice(restIndex).join(" ");
+  // Алиасы авиакомпаний
+  airlineLetters = callsignAliasesJoined[airlineLetters] || airlineLetters;
+
+  // === 2. Собираем цифры рейса ===
+  while (i < words.length) {
+    const w = words[i];
+
+    if (numMap[w]) {
+      flightNumbers += numMap[w];
+      i++;
+      continue;
+    }
+
+    if (/^\d+$/.test(w)) {
+      flightNumbers += w;
+      i++;
+      continue;
+    }
+
+    break; // больше не цифры → конец callsign
+  }
+
+  // === 3. Остаток фразы (команды) ===
+  const rest = words.slice(i).join(" ");
 
   return {
     callsign: airlineLetters + flightNumbers,
@@ -189,7 +252,7 @@ function parseCommands(restText) {
 
 function setHeading(words, selectedPlane ) {
   if (!selectedPlane) return;
-  const heading = convertWordsToDigits(words);
+  const heading = convertWordsToDigits(words) % 360;
   if (heading !== null && heading >= 0 && heading < 360) {
     selectedPlane.targetHeading = heading;
     confirmHeadingChange(selectedPlane, heading)

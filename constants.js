@@ -58,4 +58,6 @@ export const RADAR_UPLOAD = 5000;
 export const MAX_PLANES = 8;
 export const AIRLINES = ["SAS", "DLH", "BAW", "AFL", "RYR", "KLM"];
 
+export const PTT_BUTTON = 'Space';
+
 

@@ -87,3 +87,25 @@ button[data-action] {
 button[data-action]:hover {
   filter: brightness(1.15);
 }
+
+.ptt-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 10px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.ptt-light {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background-color: #444; /* серый — выключено */
+    transition: background-color 0.1s;
+}
+
+/* класс для активной лампочки */
+.ptt-light.active {
+    background-color: #0f0; /* зелёный — включено */
+}
