@@ -27,7 +27,7 @@ initStaticCanvas(runway, azimuthalGrid, ui.canvas);
 
 // ——— SPAWNING ————
 spawnPlane(MAX_PLANES);        // начальные самолеты
-setInterval(() => spawnPlane(1), 2500); // каждую секунду по 1
+//setInterval(() => spawnPlane(1), 2500); // каждую секунду по 1
 
 // ——— RADAR PINGS ————
 const planes = getPlanes();

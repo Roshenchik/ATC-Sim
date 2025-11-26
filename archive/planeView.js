@@ -1,6 +1,6 @@
 // PlaneView.js
-import { PLANE_SIZE, VECTOR_LENGTH } from "./constants.js";
-import { degToRad } from "./utils.js";
+import { PLANE_SIZE, VECTOR_LENGTH } from "../constants.js";
+import { degToRad } from "../utils.js";
 
 const COLORS = {
   STCA_PLANE: 'rgba(255,0,0,1)',

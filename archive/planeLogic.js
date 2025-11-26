@@ -1,5 +1,5 @@
 // PlaneLogic.js
-import { degToRad, radToDeg, normalizeAngle, kphToPxPerSec } from "./utils.js";
+import { degToRad, radToDeg, normalizeAngle, kphToPxPerSec } from "../utils.js";
 import { 
   AIRLINES,
   FLIGHTLEVELS, 
@@ -12,10 +12,10 @@ import {
   STCA_RADIUS, 
   STCA_VERT_DIST_F,
   OFFSCREEN_MARGIN, 
-} from "./constants.js";
-import { sayReachedAltitude, sayReachedSpeed, sayReachedHeading } from "./pilotReplyAudioApi.js";
-import { airlinePrefixes } from "./callsignAliases.js";
-import { getFinalLegArea, getRunway } from "./radarStatics.js";
+} from "../constants.js";
+import { sayReachedAltitude, sayReachedSpeed, sayReachedHeading } from "../pilotReplyAudioApi.js";
+import { airlinePrefixes } from "../callsignAliases.js";
+import { getFinalLegArea, getRunway } from "../radarStatics.js";
 
 export class PlaneLogic {
   constructor(x, y, heading) {
