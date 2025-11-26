@@ -1,6 +1,6 @@
 import { getPlanes, cleanupPlanes } from "./planesManager.js";
 import { renderStatic } from "./radarStatics.js";
-import { ui, ctx, drawMeasureTool } from "./ui.js";
+import { ui, ctx, drawSavedRulers, drawPreviewRuler } from "./ui.js";
 
 let lastTime = performance.now();
 
@@ -19,7 +19,8 @@ export function gameLoop(now) {
 
   cleanupPlanes(planes, ui.azimuthalGrid);
 
-  drawMeasureTool(ctx)
+  drawSavedRulers(ctx);
+  drawPreviewRuler(ctx);
 
   requestAnimationFrame(gameLoop);
 }
