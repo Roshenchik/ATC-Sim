@@ -19,6 +19,7 @@ import {
 import { sayReachedAltitude, sayReachedSpeed, sayReachedHeading } from "./pilotReplyAudioApi.js";
 import { airlinePrefixes } from "./callsignAliases.js";
 import { getFinalLegArea, getRunway } from "./radarStatics.js";
+import { worldToScreen } from "./zoom.js";
 
 const COLORS = {
   STCA_PLANE: 'rgba(255,0,0,1)',
@@ -237,7 +238,10 @@ export class Plane {
 
   // ======= VISUAL METHODS =======
   drawPlane() {
-    const { displayX: x, displayY: y, displayHeading: heading, selected, stca } = this;
+    const { displayX, displayY, displayHeading: heading, selected, stca } = this;
+    //scaling
+    const { x, y, vector } = worldToScreen({ x: displayX, y: displayY, vector: VECTOR_LENGTH});
+
     const ctx = this.ctx;
 
     const fillColor = stca ? COLORS.STCA_PLANE : (selected ? COLORS.SELECTED_PLANE : COLORS.DEFAULT_PLANE);
@@ -256,8 +260,8 @@ export class Plane {
 
     // heading vector (line)
     const rad = degToRad(heading - 90);
-    const x2 = x + Math.cos(rad) * VECTOR_LENGTH;
-    const y2 = y + Math.sin(rad) * VECTOR_LENGTH;
+    const x2 = x + Math.cos(rad) * vector;
+    const y2 = y + Math.sin(rad) * vector;
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x2, y2);
@@ -267,7 +271,9 @@ export class Plane {
   }
 
   drawLabel() {
-    const { displayX: x, displayY: y, displayHeading: heading, selected, callsign, groundSpeed, flightLevel } = this;
+    const { displayX, displayY, displayHeading: heading, selected, callsign, groundSpeed, flightLevel } = this;
+    //scaling
+    const { x, y } = worldToScreen({ x: displayX, y: displayY });
     const ctx = this.ctx;
 
     const rad = degToRad(heading - 90);
