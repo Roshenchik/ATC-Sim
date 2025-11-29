@@ -1,6 +1,7 @@
 import { getPlanes, cleanupPlanes } from "./planesManager.js";
-import { renderStatic } from "./radarStatics.js";
+import { drawStatics } from "./radarStatics.js";
 import { ui, ctx, drawSavedRulers, drawPreviewRuler } from "./ui.js";
+import { checkZoomChange } from "./zoom.js";
 
 let lastTime = performance.now();
 
@@ -10,7 +11,7 @@ export function gameLoop(now) {
 
   ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
 
-  renderStatic(ctx);
+  drawStatics(ctx);
 
   const planes = getPlanes();
 
@@ -21,6 +22,8 @@ export function gameLoop(now) {
 
   drawSavedRulers(ctx);
   drawPreviewRuler(ctx);
+
+  checkZoomChange(ctx)
 
   requestAnimationFrame(gameLoop);
 }
