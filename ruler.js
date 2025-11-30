@@ -1,5 +1,6 @@
 // ruler.js
 import { METERS_PER_PIXEL } from "./constants.js";
+import { worldToScreen, camera } from "./zoom.js";
 // =====================
 // ====== DRAWING RULER ======
 export class Ruler {
@@ -49,28 +50,35 @@ export class Ruler {
     return Math.sqrt(dx*dx + dy*dy) <= threshold;
   }
 
-  // рисование
+    // рисование
   draw(ctx, color="rgba(0,255,255,0.9)") {
     ctx.save();
+
+    // конвертируем мировые координаты в экранные
+    const start = worldToScreen({ x: this.x1, y: this.y1 });
+    const end   = worldToScreen({ x: this.x2, y: this.y2 });
 
     // линия
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(this.x1, this.y1);
-    ctx.lineTo(this.x2, this.y2);
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
     ctx.stroke();
 
     // подпись
+    const midX = (start.x + end.x) / 2;
+    const midY = (start.y + end.y) / 2;
+
     const label = `${this.dist.toFixed(2)} km | ${this.angle.toFixed(0)}°`;
     ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillRect(this.midX - 60, this.midY - 12, 120, 20);
+    ctx.fillRect(midX - 60, midY - 12, 120, 20);
 
     ctx.fillStyle = color;
     ctx.font = "13px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, this.midX, this.midY);
+    ctx.fillText(label, midX, midY);
 
     ctx.restore();
   }

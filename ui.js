@@ -4,7 +4,7 @@ import { clamp } from "./utils.js";
 import { getPlanes } from "./planesManager.js";
 import { confirmAltitudeChange, confirmHeadingChange, confirmSpeedChange } from "./pilotReplyAudioApi.js";
 import { Ruler } from "./ruler.js";
-import { onKeyboardZoom } from "./zoom.js";
+import { onKeyboardZoom, screenToWorld, worldToScreen, checkZoomChange } from "./zoom.js";
 
 export const ui = {
   canvas: document.querySelector('[data-element="canvas"]'),
@@ -64,8 +64,9 @@ export function handleCanvasClick(event, planes) {
 
   const radiusSq = SELECT_RADIUS * SELECT_RADIUS;
   for (const p of planes) {
-    const dx = m.x - p.displayX;
-    const dy = m.y - p.displayY;
+    const screenPos = worldToScreen({ x: p.displayX, y: p.displayY });
+    const dx = m.x - screenPos.x;
+    const dy = m.y - screenPos.y;
 
     if (dx * dx + dy * dy < radiusSq) {
       setSelectedPlane(p)
@@ -118,15 +119,17 @@ let measureEnd = null;     // текущая позиция мыши
 let rulers = [];           // сохранённые линейки
 
 function onLeftClick(event) {
+  const worldPos = screenToWorld(getMouseCoords(event));
+
   if (!isMeasuring) {
-    // старт превью
+    // старт превью — только мировые координаты
     isMeasuring = true;
-    measureStart = getMouseCoords(event);
-    measureEnd = { ...measureStart };
+    measureStart = { ...worldPos };
+    measureEnd = { ...worldPos };
     return;
   }
 
-  // завершение — сохраняем линейку
+  // завершение — сохраняем линейку в мировых координатах
   rulers.push(new Ruler(measureStart.x, measureStart.y, measureEnd.x, measureEnd.y));
 
   // сброс превью
@@ -135,15 +138,19 @@ function onLeftClick(event) {
   measureEnd = null;
 }
 
+let lastMouseScreen = null;
 function onMouseMove(event) {
-  if (!isMeasuring) return;
-  measureEnd = getMouseCoords(event);
+  lastMouseScreen = getMouseCoords(event);
+
+  if (isMeasuring) {
+    measureEnd = screenToWorld(lastMouseScreen);
+  }
 }
 
 function onRightClick(event) {
   event.preventDefault();
 
-  const { x, y } = getMouseCoords(event);
+  const world = screenToWorld(getMouseCoords(event));
 
   // отмена текущего превью
   if (isMeasuring) {
@@ -156,7 +163,7 @@ function onRightClick(event) {
   // удаление ближайшей сохранённой линейки
   const threshold = 5;
   for (let i = 0; i < rulers.length; i++) {
-    if (rulers[i].isNear(x, y, threshold)) {
+    if (rulers[i].isNear(world.x, world.y, threshold)) {
       rulers.splice(i, 1);
       break;
     }
@@ -171,6 +178,8 @@ export function drawSavedRulers(ctx) {
 // рисование превью
 export function drawPreviewRuler(ctx) {
   if (!isMeasuring || !measureStart || !measureEnd) return;
+
+  measureEnd = screenToWorld(lastMouseScreen);
 
   new Ruler(measureStart.x, measureStart.y, measureEnd.x, measureEnd.y)
     .draw(ctx, "rgba(0,255,255,0.9)");

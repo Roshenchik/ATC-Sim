@@ -36,11 +36,18 @@ export function worldToScreen({ x, y, ...sizes }) {
   return result;
 }
 
-export function screenToWorld(screenX, screenY) {
-  return {
-    x: (screenX - ui.canvas.width / 2) / camera.zoom + camera.x,
-    y: (screenY - ui.canvas.height / 2) / camera.zoom + camera.y,
+export function screenToWorld({ x, y, ...sizes }) {
+  const result = {
+    x: (x - ui.canvas.width / 2) / camera.zoom + camera.x,
+    y: (y - ui.canvas.height / 2) / camera.zoom + camera.y,
   };
+
+  // если переданы дополнительные размеры (например, ширина/высота)
+  for (const key in sizes) {
+    result[key] = sizes[key] / camera.zoom;
+  }
+
+  return result;
 }
 
 // export function onWheelScroll(e) {
@@ -73,12 +80,8 @@ export function onKeyboardZoom(e) {
 }
 
 let prevZoom = camera.zoom
-export function checkZoomChange(ctx) {
+export function checkZoomChange() {
   if (camera.zoom == prevZoom) return;
-
-  //rerender statik elements
-  drawStatics(ctx);
-
-
   prevZoom = camera.zoom;
+  return true
 }

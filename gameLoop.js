@@ -23,7 +23,7 @@ export function gameLoop(now) {
   drawSavedRulers(ctx);
   drawPreviewRuler(ctx);
 
-  checkZoomChange(ctx)
+  //=checkZoomChange(ctx)
 
   requestAnimationFrame(gameLoop);
 }
