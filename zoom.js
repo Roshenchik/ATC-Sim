@@ -31,8 +31,6 @@ export function worldToScreen({ x, y, ...sizes }) {
     result[key] = sizes[key] * camera.zoom;
   }
 
-  //console.log(ui.canvas.width/2)
-
   return result;
 }
 
@@ -50,21 +48,12 @@ export function screenToWorld({ x, y, ...sizes }) {
   return result;
 }
 
-// export function onWheelScroll(e) {
-//   e.preventDefault();
-//   const zoomFactor = 1.5;
-//   const mouseWorldBefore = screenToWorld(e.offsetX, e.offsetY, ui.canvas);
-
-//   if (e.deltaY < 0) camera.zoom *= zoomFactor;
-//   else camera.zoom /= zoomFactor;
-
-//   camera.zoom = clamp(camera.zoom, camera.minZoom, camera.maxZoom);
-
-//   const mouseWorldAfter = screenToWorld(e.offsetX, e.offsetY, ui.canvas);
-//   camera.x += mouseWorldBefore.x - mouseWorldAfter.x;
-//   camera.y += mouseWorldBefore.y - mouseWorldAfter.y;
-//   console.log(camera.zoom)
-// }
+export function onWheelZoom(e) {
+  e.preventDefault();
+  const zoomStep = 0.1;
+  camera.zoom += e.deltaY < 0 ? zoomStep : -zoomStep;
+  camera.zoom = clamp(camera.zoom, camera.minZoom, camera.maxZoom);
+}
 
 export function onKeyboardZoom(e) {
   const zoomStep = 0.1;
@@ -85,3 +74,31 @@ export function checkZoomChange() {
   prevZoom = camera.zoom;
   return true
 }
+
+
+let isCameraDragging = false;
+let cameraDragStartScreen = null;
+export function startCameraDrag(event) {
+  if (event.button !== 1) return; // средняя кнопка
+  isCameraDragging = true;
+  cameraDragStartScreen = { x: event.clientX, y: event.clientY };
+}
+
+export function dragCamera(event) {
+  if (!isCameraDragging) return;
+
+  const dx = (cameraDragStartScreen.x - event.clientX) / camera.zoom;
+  const dy = (cameraDragStartScreen.y - event.clientY) / camera.zoom;
+
+  camera.x += dx;
+  camera.y += dy;
+
+  cameraDragStartScreen = { x: event.clientX, y: event.clientY };
+}
+
+export function stopCameraDrag(event) {
+  if (event.button !== 1) return;
+  isCameraDragging = false;
+  cameraDragStartScreen = null;
+}
+

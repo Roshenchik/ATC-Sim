@@ -4,7 +4,7 @@ import { clamp } from "./utils.js";
 import { getPlanes } from "./planesManager.js";
 import { confirmAltitudeChange, confirmHeadingChange, confirmSpeedChange } from "./pilotReplyAudioApi.js";
 import { Ruler } from "./ruler.js";
-import { onKeyboardZoom, screenToWorld, worldToScreen, checkZoomChange } from "./zoom.js";
+import { onKeyboardZoom, screenToWorld, worldToScreen, startCameraDrag, stopCameraDrag, dragCamera, onWheelZoom } from "./zoom.js";
 
 export const ui = {
   canvas: document.querySelector('[data-element="canvas"]'),
@@ -218,3 +218,12 @@ ui.canvas.addEventListener('click', e => handleCanvasClick(e, getPlanes() || [])
 document.addEventListener('keydown', e => onKeyboardZoom(e));
 
 document.addEventListener('click', handleDocumentClick);
+
+ui.canvas.addEventListener("wheel", onWheelZoom);
+
+
+
+ui.canvas.addEventListener("mousedown", startCameraDrag);
+ui.canvas.addEventListener("mousemove", dragCamera);
+ui.canvas.addEventListener("mouseup", stopCameraDrag);
+ui.canvas.addEventListener("mouseleave", stopCameraDrag);
