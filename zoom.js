@@ -1,7 +1,6 @@
 // zoom.js
 import { clamp } from "./utils.js";
 import { ui } from "./ui.js";
-import { drawStatics } from "./radarStatics.js";
 
 export const camera = {
   x: 0, // центр камеры в world coordinates
@@ -16,15 +15,11 @@ export function setCameraOnObjCenter(x, y, width, height) {
   camera.y = y + height / 2;
 }
 
-// Конвертация координат мира → экран
+// Convertions
 export function worldToScreen({ x, y, ...sizes }) {
-
-  const screenX = (x - camera.x) * camera.zoom + ui.canvas.width / 2;
-  const screenY = (y - camera.y) * camera.zoom + ui.canvas.height / 2;
-
   const result = {
-    x: screenX,
-    y: screenY,
+    x: (x - camera.x) * camera.zoom + ui.canvas.width / 2,
+    y: (y - camera.y) * camera.zoom + ui.canvas.height / 2,
   };
 
   for (const key in sizes) {
@@ -40,7 +35,6 @@ export function screenToWorld({ x, y, ...sizes }) {
     y: (y - ui.canvas.height / 2) / camera.zoom + camera.y,
   };
 
-  // если переданы дополнительные размеры (например, ширина/высота)
   for (const key in sizes) {
     result[key] = sizes[key] / camera.zoom;
   }
@@ -48,10 +42,13 @@ export function screenToWorld({ x, y, ...sizes }) {
   return result;
 }
 
+
+//ZOOM
 export function onWheelZoom(e) {
   e.preventDefault();
   const zoomStep = 0.1;
-  camera.zoom += e.deltaY < 0 ? zoomStep : -zoomStep;
+
+  camera.zoom += e.deltaY < 0 ? -zoomStep : zoomStep;
   camera.zoom = clamp(camera.zoom, camera.minZoom, camera.maxZoom);
 }
 
@@ -63,8 +60,6 @@ export function onKeyboardZoom(e) {
   } else if (e.key === '-') {
     camera.zoom -= zoomStep;
   }
-
-  // Ограничиваем зум
   camera.zoom = clamp(camera.zoom, camera.minZoom, camera.maxZoom);
 }
 
@@ -76,6 +71,7 @@ export function checkZoomChange() {
 }
 
 
+//CAMERA MOVE
 let isCameraDragging = false;
 let cameraDragStartScreen = null;
 export function startCameraDrag(event) {
@@ -101,4 +97,9 @@ export function stopCameraDrag(event) {
   isCameraDragging = false;
   cameraDragStartScreen = null;
 }
+
+
+
+
+
 

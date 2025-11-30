@@ -3,8 +3,8 @@ import { MAX_SPEED_KPH, MIN_SPEED_KPH, MIN_FL, MAX_FL, SELECT_RADIUS, SIDEBAR_WI
 import { clamp } from "./utils.js";
 import { getPlanes } from "./planesManager.js";
 import { confirmAltitudeChange, confirmHeadingChange, confirmSpeedChange } from "./pilotReplyAudioApi.js";
-import { Ruler } from "./ruler.js";
 import { onKeyboardZoom, screenToWorld, worldToScreen, startCameraDrag, stopCameraDrag, dragCamera, onWheelZoom } from "./zoom.js";
+import { rulerHandleLeftClick, rulerHandleRightClick, rulerHandleMouseMove } from "./rulersManager.js";
 
 export const ui = {
   canvas: document.querySelector('[data-element="canvas"]'),
@@ -57,7 +57,7 @@ export function updatePlaneInfo(plane) {
 
 // =====================
 // ====== SELECTION LOGIC ======
-export function handleCanvasClick(event, planes) {
+export function planeSelectOnCanvasClick(event, planes) {
   const m = getMouseCoords(event)
 
   unsetSelectedPlane(planes);
@@ -79,7 +79,7 @@ export function handleCanvasClick(event, planes) {
 
 // =====================
 // ====== INPUT HANDLERS ======
-export function handleDocumentClick(event) {
+export function planeApplyInput(event) {
   if (!selectedPlane) return;
 
   const action = event.target.dataset.action;
@@ -112,85 +112,12 @@ export function handleDocumentClick(event) {
   }
 }
 
-// --- Measure tool state ---
-let isMeasuring = false;   // идёт ли рисование превью
-let measureStart = null;   // начало превью
-let measureEnd = null;     // текущая позиция мыши
-let rulers = [];           // сохранённые линейки
-
-function onLeftClick(event) {
-  const worldPos = screenToWorld(getMouseCoords(event));
-
-  if (!isMeasuring) {
-    // старт превью — только мировые координаты
-    isMeasuring = true;
-    measureStart = { ...worldPos };
-    measureEnd = { ...worldPos };
-    return;
-  }
-
-  // завершение — сохраняем линейку в мировых координатах
-  rulers.push(new Ruler(measureStart.x, measureStart.y, measureEnd.x, measureEnd.y));
-
-  // сброс превью
-  isMeasuring = false;
-  measureStart = null;
-  measureEnd = null;
-}
-
-let lastMouseScreen = null;
-function onMouseMove(event) {
-  lastMouseScreen = getMouseCoords(event);
-
-  if (isMeasuring) {
-    measureEnd = screenToWorld(lastMouseScreen);
-  }
-}
-
-function onRightClick(event) {
-  event.preventDefault();
-
-  const world = screenToWorld(getMouseCoords(event));
-
-  // отмена текущего превью
-  if (isMeasuring) {
-    isMeasuring = false;
-    measureStart = null;
-    measureEnd = null;
-    return;
-  }
-
-  // удаление ближайшей сохранённой линейки
-  const threshold = 5;
-  for (let i = 0; i < rulers.length; i++) {
-    if (rulers[i].isNear(world.x, world.y, threshold)) {
-      rulers.splice(i, 1);
-      break;
-    }
-  }
-}
-
-// рисование всех сохранённых линейок
-export function drawSavedRulers(ctx) {
-  rulers.forEach(r => r.draw(ctx));
-}
-
-// рисование превью
-export function drawPreviewRuler(ctx) {
-  if (!isMeasuring || !measureStart || !measureEnd) return;
-
-  measureEnd = screenToWorld(lastMouseScreen);
-
-  new Ruler(measureStart.x, measureStart.y, measureEnd.x, measureEnd.y)
-    .draw(ctx, "rgba(0,255,255,0.9)");
-}
-
 export function setPttActive(active) {
   if (!ui.pttLightElement) return;
   ui.pttLightElement.classList.toggle("active", active);
 }
 
-function getMouseCoords(event) {
+export function getMouseCoords(event) {
   const rect = ui.canvas.getBoundingClientRect();
   const scaleX = ui.canvas.width / rect.width;
   const scaleY = ui.canvas.height / rect.height;
@@ -203,27 +130,24 @@ function getMouseCoords(event) {
 
 // =====================
 // ====== EVENT LISTENERS ======
-ui.canvas.addEventListener("mousemove", onMouseMove);
 
+//drawing rulers
 ui.canvas.addEventListener("mousedown", e => {
-  if (e.button === 0) onLeftClick(e);
-  if (e.button === 2) onRightClick(e);
+  if (e.button === 0) rulerHandleLeftClick(e);
+  if (e.button === 2) rulerHandleRightClick(e);
 });
+ui.canvas.addEventListener("mousemove", rulerHandleMouseMove);
 
-// блокируем дефолтное контекстное меню
+//select and input
 ui.canvas.addEventListener("contextmenu", e => e.preventDefault());
+ui.canvas.addEventListener('click', e => planeSelectOnCanvasClick(e, getPlanes() || []));
+document.addEventListener('click', planeApplyInput);
 
-ui.canvas.addEventListener('click', e => handleCanvasClick(e, getPlanes() || []));
-
-document.addEventListener('keydown', e => onKeyboardZoom(e));
-
-document.addEventListener('click', handleDocumentClick);
-
-ui.canvas.addEventListener("wheel", onWheelZoom);
-
-
-
+//zoom and camera move
 ui.canvas.addEventListener("mousedown", startCameraDrag);
 ui.canvas.addEventListener("mousemove", dragCamera);
 ui.canvas.addEventListener("mouseup", stopCameraDrag);
 ui.canvas.addEventListener("mouseleave", stopCameraDrag);
+
+document.addEventListener('keydown', e => onKeyboardZoom(e));
+ui.canvas.addEventListener("wheel", onWheelZoom);

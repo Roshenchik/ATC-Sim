@@ -1,6 +1,7 @@
 import { getPlanes, cleanupPlanes } from "./planesManager.js";
 import { drawStatics } from "./radarStatics.js";
-import { ui, ctx, drawSavedRulers, drawPreviewRuler } from "./ui.js";
+import { ui, ctx } from "./ui.js";
+import { drawSavedRulers, drawPreviewRuler } from "./rulersManager.js";
 import { checkZoomChange } from "./zoom.js";
 
 let lastTime = performance.now();
