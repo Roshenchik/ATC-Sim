@@ -1,7 +1,7 @@
 // ui.js
 import { MAX_SPEED_KPH, MIN_SPEED_KPH, MIN_FL, MAX_FL, SELECT_RADIUS, SIDEBAR_WIDTH, METERS_PER_PIXEL } from "./constants.js";
 import { clamp } from "./utils.js";
-import { getPlanes } from "./planesManager.js";
+import { getPlanes, planes } from "./planesManager.js";
 import { confirmAltitudeChange, confirmHeadingChange, confirmSpeedChange } from "./pilotReplyAudioApi.js";
 import { onKeyboardZoom, screenToWorld, worldToScreen, startCameraDrag, stopCameraDrag, dragCamera, onWheelZoom } from "./zoom.js";
 import { rulerHandleLeftClick, rulerHandleRightClick, rulerHandleMouseMove } from "./rulersManager.js";
@@ -31,6 +31,7 @@ export function unsetSelectedPlane(planeArr) {
   selectedPlane = null;
   updatePlaneInfo(null); 
 }
+
 // =====================
 // ====== CANVAS SIZE (DPI) ======
 export function resizeCanvas() {
@@ -76,6 +77,75 @@ export function planeSelectOnCanvasClick(event, planes) {
 
   if (!selectedPlane) updatePlaneInfo(null);
 }
+
+// =====================
+// ====== LABEL DRAGGING ======
+let draggingLabel = null;
+let dragStartX = null;
+let dragStartY = null;
+let startOffsetX = null;
+let startOffsetY = null;
+
+export function isLabelHovered(event, plane) { 
+  const m = (getMouseCoords(event))
+  const l = plane.labelArea;
+  if (m.x >= l.x1 && m.x <= l.x2 &&
+      m.y >= l.y1 && m.y <= l.y2) {
+    return true;
+  }
+  return false
+}
+
+export function startLabelDrag(event, planes) {
+  if (event.button !== 1) return;
+  const m = (getMouseCoords(event))
+
+  for (const p of planes) {
+    if (isLabelHovered(event, p)) {
+      draggingLabel = p;
+
+      const dragStartWorld = screenToWorld({ x: m.x, y: m.y, })
+      dragStartX = dragStartWorld.x;
+      dragStartY = dragStartWorld.y;
+
+      //convert label area to world coords
+      const labelWorld = screenToWorld({x: p.labelArea.x1 + 4, y: p.labelArea.y1 + 2}); 
+
+      p.labelOffsetWX = labelWorld.x - p.displayX;
+      p.labelOffsetWY = labelWorld.y - p.displayY;
+
+      startOffsetX =  p.labelOffsetWX;
+      startOffsetY =  p.labelOffsetWY;
+
+      break;
+    }
+  }
+}
+
+export function labelDrag(event) {
+  if (!draggingLabel) return;
+  const m = screenToWorld(getMouseCoords(event))
+
+  const dx = m.x - dragStartX;
+  const dy = m.y - dragStartY;
+
+  draggingLabel.labelOffsetWX = dx + startOffsetX;
+  draggingLabel.labelOffsetWY = dy + startOffsetY;
+}
+
+export function stopLabelDrag(event) {
+  if (event.button !== 1) return;
+
+  draggingLabel = null;
+  dragStartX = null;
+  dragStartY = null;
+ startOffsetX =  null;
+ startOffsetY =  null;
+}
+
+ui.canvas.addEventListener("mousedown", e => startLabelDrag(e, planes));
+ui.canvas.addEventListener("mousemove", e => labelDrag(e));
+ui.canvas.addEventListener("mouseup", e => stopLabelDrag(e));
 
 // =====================
 // ====== INPUT HANDLERS ======
@@ -144,7 +214,13 @@ ui.canvas.addEventListener('click', e => planeSelectOnCanvasClick(e, getPlanes()
 document.addEventListener('click', planeApplyInput);
 
 //zoom and camera move
-ui.canvas.addEventListener("mousedown", startCameraDrag);
+ui.canvas.addEventListener("mousedown", e => {
+  const planes = getPlanes();
+  for (const p of planes) {
+    if (isLabelHovered(e, p)) return; 
+  }
+  startCameraDrag(e);
+});
 ui.canvas.addEventListener("mousemove", dragCamera);
 ui.canvas.addEventListener("mouseup", stopCameraDrag);
 ui.canvas.addEventListener("mouseleave", stopCameraDrag);

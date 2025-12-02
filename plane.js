@@ -19,7 +19,7 @@ import {
 import { sayReachedAltitude, sayReachedSpeed, sayReachedHeading } from "./pilotReplyAudioApi.js";
 import { airlinePrefixes } from "./callsignAliases.js";
 import { getFinalLegArea, getRunway } from "./radarStatics.js";
-import { worldToScreen } from "./zoom.js";
+import { screenToWorld, worldToScreen } from "./zoom.js";
 
 const COLORS = {
   STCA_PLANE: 'rgba(255,0,0,1)',
@@ -69,6 +69,11 @@ export class Plane {
     this.targetAltitude = this.altitude;
     this.maxClimbRate = MAX_CLIMB_RATE_FPM;
     this.maxDescentRate = MAX_DESCENT_RATE_FPM;
+
+    //for label dragging
+    this.labelOffsetWX = null;
+    this.labelOffsetWY = null;
+    this.labelArea = {x1: 0, y1: 0, x2: 0, y2: 0};
   }
 
   // ======= GETTERS =======
@@ -239,12 +244,21 @@ export class Plane {
   // ======= VISUAL METHODS =======
   drawPlane() {
     const { displayX, displayY, displayHeading: heading, selected, stca } = this;
-    //scaling
-    const { x, y, vector } = worldToScreen({ x: displayX, y: displayY, vector: VECTOR_LENGTH});
-
     const ctx = this.ctx;
 
-    const fillColor = stca ? COLORS.STCA_PLANE : (selected ? COLORS.SELECTED_PLANE : COLORS.DEFAULT_PLANE);
+    const { x, y, vector } = worldToScreen({ 
+      x: displayX,
+      y: displayY,
+      vector: VECTOR_LENGTH
+    });
+
+    const fillColor = stca 
+      ? COLORS.STCA_PLANE 
+      : (selected ? COLORS.SELECTED_PLANE : COLORS.DEFAULT_PLANE);
+
+    const outlineColor = stca
+      ? OUTLINE_COLORS.STCA_PLANE
+      : (selected ? OUTLINE_COLORS.SELECTED_PLANE : OUTLINE_COLORS.DEFAULT_PLANE);
 
     // diamond shape
     ctx.beginPath();
@@ -255,40 +269,40 @@ export class Plane {
     ctx.closePath();
     ctx.fillStyle = fillColor;
     ctx.fill();
-    ctx.strokeStyle = stca ? OUTLINE_COLORS.STCA_PLANE : (selected ? OUTLINE_COLORS.SELECTED_PLANE : OUTLINE_COLORS.DEFAULT_PLANE);
+
+    ctx.strokeStyle = outlineColor;
     ctx.stroke();
 
     // heading vector (line)
     const rad = degToRad(heading - 90);
     const x2 = x + Math.cos(rad) * vector;
     const y2 = y + Math.sin(rad) * vector;
+
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x2, y2);
-    ctx.strokeStyle = stca ? OUTLINE_COLORS.STCA_PLANE : (selected ? OUTLINE_COLORS.SELECTED_PLANE : OUTLINE_COLORS.DEFAULT_PLANE);
+
+    ctx.strokeStyle = outlineColor;
     ctx.lineWidth = VECTOR_WIDTH;
     ctx.stroke();
   }
 
   drawLabel() {
-    const { displayX, displayY, displayHeading: heading, selected, callsign, groundSpeed, flightLevel } = this;
-    //scaling
-    const { x, y } = worldToScreen({ x: displayX, y: displayY });
+    // ===== Label settings =====
+    const LABEL_FONT = '10px monospace';
+    const LABEL_LINE_HEIGHT = 12;
+    const LABEL_PADDING_X = 4;
+    const LABEL_PADDING_Y = 2;
+    const LABEL_BOX_ALPHA = 0.5;
+    const LABEL_OFFSET = 15; // расстояние от самолета к началу формуляра
+
+    const { displayX, displayY, labelOffsetWX, labelOffsetWY, displayHeading: heading, selected, callsign, groundSpeed, flightLevel } = this;
     const ctx = this.ctx;
 
+    const { x, y, } = worldToScreen({ x: displayX, y: displayY, });
     const rad = degToRad(heading - 90);
-    const offset = 15;
-    let offsetX = -Math.sin(rad) * offset;
-    let offsetY = Math.cos(rad) * offset;
-    let textX = x + offsetX;
-    let textY = y + offsetY;
 
-    ctx.save();
-    ctx.font = '10px monospace';
-    ctx.textBaseline = 'top';
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth = 3;
-
+    // ===== Текст =====
     const lines = [
       `${callsign}`,
       `HDG ${heading.toFixed(0).padStart(3,'0')}`,
@@ -296,38 +310,136 @@ export class Plane {
       `FL ${flightLevel}`
     ];
 
+    ctx.save();
+    ctx.font = LABEL_FONT;
+    ctx.textBaseline = 'top';
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 3;
+
+    // ===== Размеры текста =====
     let maxWidth = 0;
-    for (const line of lines) maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
-    const boxWidth = maxWidth + 8;
-    const boxHeight = lines.length * 12 + 4;
-
-    if (heading > 180 && heading <= 270) {
-      textX = x - offsetX;
-      textY = y - offsetY;
-    }
-    let boxClosestCorner = textX - 4;
-    if (heading > 90 && heading <= 180) {
-      textX = x - boxWidth + offsetX;
-      boxClosestCorner = (textX - 4) + boxWidth;
+    for (const line of lines) {
+      maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
     }
 
-    ctx.fillStyle = 'rgba(100,100,100,0.5)';
-    ctx.fillRect(textX - 4, textY - 2, boxWidth, boxHeight);
+    const boxWidth = maxWidth + LABEL_PADDING_X * 2;;
+    const boxHeight = lines.length * LABEL_LINE_HEIGHT + LABEL_PADDING_Y * 2;
+
+    // ===== ОТСТУП ФОРМУЛЯРА ОТ САМОЛЁТА =====
+    // ===== Стандартный offset =====
+    const baseOffsetX = -Math.sin(rad) * LABEL_OFFSET;
+    const baseOffsetY =  Math.cos(rad) * LABEL_OFFSET;
+
+    // ===== Оптимизация положения по секторам =====
+    let finalOffsetX = baseOffsetX;
+    let finalOffsetY = baseOffsetY;
+
+    const normalizedHeading = heading % 360;
+
+    if (normalizedHeading > 90 && normalizedHeading <= 180) {
+      finalOffsetX -= boxWidth;
+    } else if (normalizedHeading > 180 && normalizedHeading <= 270) {
+      finalOffsetX = -baseOffsetX;
+      finalOffsetY = -baseOffsetY;
+    } else if (normalizedHeading > 270 && normalizedHeading <= 360) {
+      finalOffsetX = -baseOffsetX - boxWidth;
+      finalOffsetY = -baseOffsetY;
+    }
+
+
+    let textX = x + finalOffsetX;
+    let textY = y + finalOffsetY;
+    // ===== Если формуляр перетаскивался — добавляем дельту =====
+    if (labelOffsetWX != null && labelOffsetWY != null) {
+      const worldLabel = { x: displayX + labelOffsetWX, y: displayY + labelOffsetWY };
+      const screenLabel = worldToScreen(worldLabel);
+      textX = screenLabel.x;
+      textY = screenLabel.y;
+    }
+
+    // ===== Фон =====
+    this.labelArea = {
+      x1: textX - LABEL_PADDING_X,
+      y1: textY - LABEL_PADDING_Y,
+      x2: textX - LABEL_PADDING_X + boxWidth,
+      y2: textY - LABEL_PADDING_Y + boxHeight,
+    };
+    
+    ctx.fillStyle = `rgba(100,100,100,${LABEL_BOX_ALPHA})`;
+    ctx.fillRect(this.labelArea.x1, this.labelArea.y1, boxWidth, boxHeight);
+
+   // ===== Вектор связка =====
+    const labelMidX = textX - LABEL_PADDING_X + boxWidth / 2;
+    const labelMidY = textY - LABEL_PADDING_Y + boxHeight / 2;
+
+    // Получаем точку на границе формуляра
+    const clipped = this.clipLine(x, y, labelMidX, labelMidY, this.labelArea);
 
     ctx.beginPath();
-    ctx.moveTo(boxClosestCorner, textY - 2);
-    ctx.lineTo(x, y);
+    ctx.moveTo(x, y);
+    ctx.lineTo(clipped.x0, clipped.y0);
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 0.5;
     ctx.stroke();
 
+    // ===== Текст =====
     ctx.fillStyle = selected ? COLORS.SELECTED_PLANE : COLORS.DEFAULT_PLANE;
-    lines.forEach((line,i) => ctx.fillText(line, textX, textY + i * 12));
+    lines.forEach((line,i) => ctx.fillText(line, textX, textY + i * LABEL_LINE_HEIGHT));
     ctx.restore();
   }
 
   drawAll() {
     this.drawPlane();
     this.drawLabel();
+  }
+
+
+  clipLine(x0, y0, x1, y1, rect) {
+    const INSIDE = 0, LEFT = 1, RIGHT = 2, BOTTOM = 4, TOP = 8;
+
+    function outcode(x, y) {
+      let code = INSIDE;
+      if (x < rect.x1) code |= LEFT;
+      else if (x > rect.x2) code |= RIGHT;
+      if (y < rect.y1) code |= BOTTOM;
+      else if (y > rect.y2) code |= TOP;
+      return code;
+    }
+
+    let code0 = outcode(x0, y0);
+    let code1 = outcode(x1, y1);
+
+    while (true) {
+      if (!(code0 | code1)) break; // обе точки внутри
+      else if (code0 & code1) return {x0, y0, x1, y1}; // обе вне с одной стороны, ничего не рисуем
+      else {
+        let x, y;
+        let out = code0 ? code0 : code1;
+
+        if (out & TOP) {
+          x = x0 + (x1 - x0) * (rect.y2 - y0) / (y1 - y0);
+          y = rect.y2;
+        } else if (out & BOTTOM) {
+          x = x0 + (x1 - x0) * (rect.y1 - y0) / (y1 - y0);
+          y = rect.y1;
+        } else if (out & RIGHT) {
+          y = y0 + (y1 - y0) * (rect.x2 - x0) / (x1 - x0);
+          x = rect.x2;
+        } else if (out & LEFT) {
+          y = y0 + (y1 - y0) * (rect.x1 - x0) / (x1 - x0);
+          x = rect.x1;
+        }
+
+        if (out === code0) {
+          x0 = x; y0 = y;
+          code0 = outcode(x0, y0);
+        } else {
+          x1 = x; y1 = y;
+          code1 = outcode(x1, y1);
+        }
+      }
+    }
+
+    return {x0, y0, x1, y1};
   }
 }
