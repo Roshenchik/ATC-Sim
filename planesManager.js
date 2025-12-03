@@ -22,7 +22,7 @@ export function spawnPlane(planeNum) {
     if (planes.length >= MAX_PLANES) return;
   
     const { centerX, centerY, maxRadius } = ui.azimuthalGrid;;
-    const spawnRadius = maxRadius + OFFSCREEN_MARGIN; 
+    const spawnRadius = 50 + OFFSCREEN_MARGIN; //turn back maxRadius then
 
     const angle = Math.random() * 360;
     const rad = degToRad(angle);

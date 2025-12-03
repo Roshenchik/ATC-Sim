@@ -14,10 +14,9 @@ import {
   OFFSCREEN_MARGIN,
 } from "./constants.js";
 import { sayReachedAltitude, sayReachedSpeed, sayReachedHeading } from "./pilotReplyAudioApi.js";
-import { airlinePrefixes } from "./callsignAliases.js";
 import { getFinalLegArea, getRunway } from "./radarStatics.js";
 import { PlaneRenderer } from "./planeRenderer.js";
-import { calcMaxAngularSpeed, calcTurningRadius, turnDirection, shortestAngleDiff } from "./planePhysics.js";
+import { calcMaxAngularSpeed, calcTurningRadius, turnDirection, shortestAngleDiff, planeInArea } from "./planePhysics.js";
 import { Callsign } from "./planeCallsign.js";
 
 export class Plane {
@@ -162,9 +161,12 @@ export class Plane {
   // Check if plane enters landing zone
   checkLanding() {
     const a = this.finalLegArea;
-    if (!this.landing &&
-        this.x >= a.x1 && this.x <= a.x2 &&
-        this.y >= a.y1 && this.y <= a.y2) {
+    const r = this.runway;
+    const isOnFinal = planeInArea(this.x, this.y, this.finalLegArea);
+    const isCorrectAlt = this.altitude <= 6000;
+    const isHeadingToRw = Math.abs(this.heading - r.heading) <= 90;
+
+    if (!this.landing && isOnFinal && isCorrectAlt && isHeadingToRw) {
       this.landing = true;
     }
   }

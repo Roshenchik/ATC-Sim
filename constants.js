@@ -22,7 +22,8 @@ export const DECELERATION_KPH_PER_SEC = 5;
 
 
 // altitude
-export const FLIGHTLEVELS = [170, 180, 190, 200, 210, 220,];
+const test = [60, 80, 90,];
+export const FLIGHTLEVELS = test;//[170, 180, 190,];
 export const MIN_FL = 0;
 export const MAX_FL = 660;
 export const MAX_CLIMB_RATE_FPM = 2500;

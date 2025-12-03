@@ -1,24 +1,7 @@
 import { RUNWAY_WIDTH, RUNWAY_LENGTH, SIDEBAR_WIDTH, FINAL_LENGTH, FINAL_BUFFER, RADAR_RADIUS } from "./constants.js";
-import { degToRad } from "./utils.js";
-import { ui } from "./ui.js";
+import { degToRad, radToDeg } from "./utils.js";
 import { camera, worldToScreen } from "./zoom.js";
 
-// ============================
-// INITIALIZERS
-// ============================
-// let staticCanvas;     
-// let staticCtx;
-// export function initStaticCanvas(rw, grid, mainCanvas) {
-//   staticCanvas = document.createElement('canvas');
-//   staticCanvas.width = mainCanvas.width;
-//   staticCanvas.height = mainCanvas.height;
-
-//   staticCtx = staticCanvas.getContext('2d');
-
-//   drawRunway(staticCtx, rw);
-//   drawFinalLegLine(staticCtx, rw);
-//   drawAzimuthalGrid(staticCtx, grid);
-// }
 
 let runway
 let finalLegArea;
@@ -30,8 +13,17 @@ export function initStatics() {
     azimuthalGrid = initAzimuthalGrid(runway);
 }
 
-export function initRunway() {
-  runway = { x: 0, y: 0, width: RUNWAY_LENGTH, height: RUNWAY_WIDTH };
+export function initRunway(headingDeg = 130) {
+  runway = {
+     x: 0,
+     y: 0,
+    width: RUNWAY_LENGTH,
+    height: RUNWAY_WIDTH,
+    heading: headingDeg,
+    get altHeading() {
+      return (this.heading + 180) % 360;
+    }
+  };
 
   const radarFieldWidth = window.innerWidth - SIDEBAR_WIDTH;
   const radarFieldHeight = window.innerHeight;
@@ -43,13 +35,25 @@ export function initRunway() {
 }
 
 export function initFinalLegArea(rw) {
-  finalLegArea = {
-    x1: rw.x - FINAL_LENGTH,
-    y1: rw.y - FINAL_BUFFER,
-    x2: rw.x,
-    y2: rw.y + rw.height + FINAL_BUFFER
-  };
-  return finalLegArea;
+  const angle = degToRad(rw.heading - 90);
+
+  // локальные точки финального сектора
+  const p1 = { x: rw.x - FINAL_LENGTH, y: rw.y - FINAL_BUFFER };
+  const p2 = { x: rw.x,                y: rw.y - FINAL_BUFFER };
+  const p3 = { x: rw.x,                y: rw.y + rw.height + FINAL_BUFFER };
+  const p4 = { x: rw.x - FINAL_LENGTH, y: rw.y + rw.height + FINAL_BUFFER };
+
+  // центр вращения — середина полосы
+  const cx = rw.x + rw.width / 2;
+  const cy = rw.y + rw.height / 2;
+
+  // поворачиваем
+  const fa1 = rotatePoint(p1.x, p1.y, cx, cy, angle);
+  const fa2 = rotatePoint(p2.x, p2.y, cx, cy, angle);
+  const fa3 = rotatePoint(p3.x, p3.y, cx, cy, angle);
+  const fa4  = rotatePoint(p4.x, p4.y, cx, cy, angle);
+
+  return finalLegArea = [fa1, fa2, fa3, fa4];
 }
 
 export function initAzimuthalGrid(rw) {
@@ -61,6 +65,20 @@ export function initAzimuthalGrid(rw) {
   return azimuthalGrid;
 }
 
+//To rotate points around center of runway. 
+//For initial placement of objects according to runway heading
+function rotatePoint(px, py, cx, cy, angleRad) {
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+  const dx = px - cx;
+  const dy = py - cy;
+
+  return {
+    x: cx + dx * cos - dy * sin,
+    y: cy + dx * sin + dy * cos
+  };
+}
+
 export function getRunway() { return runway; }
 export function getFinalLegArea() { return finalLegArea; }
 export function getAzimuthalGrid() { return azimuthalGrid; }
@@ -70,34 +88,62 @@ export function getAzimuthalGrid() { return azimuthalGrid; }
 // ============================
 export function drawStatics(ctx) {
     drawRunway(ctx, runway);
-    drawFinalLegLine(ctx, runway);
+    drawFinalLegLine(ctx, runway, finalLegArea);
     drawAzimuthalGrid(ctx, azimuthalGrid);
 }
 
-export function renderStatic(ctx) {
+export function drawRunway(ctx, rw) {
+  const scld = worldToScreen(rw);
+
+  const cx = scld.x + scld.width / 2;
+  const cy = scld.y + scld.height / 2;
+
   ctx.save();
 
-  ctx.drawImage(staticCanvas, 0, 0);
+  // Перенос в центр полосы
+  ctx.translate(cx, cy);
+
+  // Поворот вокруг центра
+  ctx.rotate((rw.heading - 90) * Math.PI / 180);
+
+  // Рисуем прямоугольник ВОКРУГ центра
+  ctx.fillStyle = "gray";
+  ctx.fillRect(-scld.width / 2, -scld.height / 2, scld.width, scld.height);
 
   ctx.restore();
 }
 
-export function drawRunway(ctx, rw) {
-  const scldRw = worldToScreen(rw)
-
-  ctx.fillStyle = 'gray';
-  ctx.fillRect(scldRw.x, scldRw.y, scldRw.width, scldRw.height);
-}
-
-export function drawFinalLegLine(ctx, rw) {
+export function drawFinalLegLine(ctx, rw, fa) {
   const scldRw = worldToScreen(rw)
   const scldFl = FINAL_LENGTH * camera.zoom;
 
-  ctx.strokeStyle = 'gray';
+  const cx = scldRw.x + scldRw.width / 2;
+  const cy = scldRw.y + scldRw.height / 2;
+
+  ctx.save();
+
+  ctx.strokeStyle = 'green';
   ctx.lineWidth = 1;
+
+  ctx.translate(cx, cy);
+  ctx.rotate((rw.heading - 90) * Math.PI / 180);
+
   ctx.beginPath();
-  ctx.moveTo(scldRw.x, scldRw.y + scldRw.height / 2);
-  ctx.lineTo(scldRw.x - scldFl, scldRw.y + scldRw.height / 2);
+  ctx.moveTo(-scldRw.width / 2, 0);
+  ctx.lineTo(-scldRw.width / 2 - scldFl, 0);
+  ctx.stroke();
+
+  ctx.restore();
+
+  const scaledFa = fa.map(pt => worldToScreen(pt));
+  ctx.strokeStyle = 'red';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(scaledFa[0].x, scaledFa[0].y);
+  ctx.lineTo(scaledFa[1].x, scaledFa[1].y);
+  ctx.lineTo(scaledFa[2].x, scaledFa[2].y);
+  ctx.lineTo(scaledFa[3].x, scaledFa[3].y);
+  ctx.lineTo(scaledFa[0].x, scaledFa[0].y); 
   ctx.stroke();
 }
 
