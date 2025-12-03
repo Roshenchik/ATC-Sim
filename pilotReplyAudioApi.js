@@ -1,6 +1,7 @@
 // pilotReply.js - Web Audio API версия для последовательного (gap=0) воспроизведения коротких клипов
 
 import { airlinePrefixes } from './callsignAliases.js';
+import { turnDirection } from './planePhysics.js';
 
 const phraseList = [
   "CLIMBING FLIGHT LEVEL",
@@ -317,7 +318,7 @@ export async function playPilotMessage(prefix, number, extraWords = ['wilco']) {
 export function confirmHeadingChange(plane, newHeading) {
   const type = 'confirm'
   const crntHeading = plane.heading;
-  const side = plane.turnDirection(newHeading, crntHeading);
+  const side = turnDirection(newHeading, crntHeading);
   let nums = newHeading.toString().padStart(3, '0').split('');
   let affirmWord = 'wilco';
 
