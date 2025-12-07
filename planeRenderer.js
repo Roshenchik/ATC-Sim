@@ -24,7 +24,11 @@ export class PlaneRenderer {
   }
 
    drawPlane() {
-    const { displayX, displayY, displayHeading: heading, selected, stca } = this.plane;
+    //FOR TESTING ONLY
+    const { x: displayX, y: displayY, heading, selected, stca } = this.plane;
+    //=================
+
+    // const { displayX, displayY, displayHeading: heading, selected, stca } = this.plane;
     const ctx = this.ctx;
 
     const { x, y, vector } = worldToScreen({ 
@@ -77,15 +81,27 @@ export class PlaneRenderer {
     const LABEL_BOX_ALPHA = 0.5;
     const LABEL_OFFSET = 13; // расстояние от самолета к началу формуляра
 
-    const {
-      displayX,
-      displayY,
-      displayHeading: heading, 
+    //FOR TESTING ONLY====
+    const { 
+      x: displayX, 
+      y: displayY,      
+      heading, 
       selected, 
       callsign, 
       groundSpeed, 
       flightLevel 
     } = this.plane;
+    //===================
+
+    // const {
+    //   displayX,
+    //   displayY,
+    //   displayHeading: heading, 
+    //   selected, 
+    //   callsign, 
+    //   groundSpeed, 
+    //   flightLevel 
+    // } = this.plane;
 
     const offsetX = this.labelOffsetWX;
     const offsetY = this.labelOffsetWY; 

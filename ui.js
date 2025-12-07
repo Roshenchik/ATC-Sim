@@ -67,7 +67,10 @@ export function planeSelectOnCanvasClick(event, planes) {
 
   const radiusSq = SELECT_RADIUS * SELECT_RADIUS;
   for (const p of planes) {
-    const screenPos = worldToScreen({ x: p.displayX, y: p.displayY });
+    //for test
+    const screenPos = worldToScreen({ x: p.x, y: p.y });
+    //=========
+    // const screenPos = worldToScreen({ x: p.displayX, y: p.displayY });
     const dx = m.x - screenPos.x;
     const dy = m.y - screenPos.y;
 

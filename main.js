@@ -18,7 +18,7 @@ resizeCanvas();
 initStatics();
 
 const rw = getRunway();
-setCameraOnObjCenter(rw.x, rw.y, rw.width, rw.height);
+setCameraOnObjCenter(rw.center.x, rw.center.y);
 
 // сохранить grid в ui, чтобы spawnPlane мог его видеть
 ui.azimuthalGrid = getAzimuthalGrid();

@@ -12,11 +12,13 @@ import {
   STCA_RADIUS, 
   STCA_VERT_DIST_F,
   OFFSCREEN_MARGIN,
+  METERS_PER_PIXEL,
+  RUNWAY_LENGTH,
 } from "./constants.js";
 import { sayReachedAltitude, sayReachedSpeed, sayReachedHeading } from "./pilotReplyAudioApi.js";
-import { getFinalLegArea, getRunway } from "./radarStatics.js";
+import { getFinalLegArea, getRunway, getCenterLine } from "./radarStatics.js";
 import { PlaneRenderer } from "./planeRenderer.js";
-import { calcMaxAngularSpeed, calcTurningRadius, turnDirection, shortestAngleDiff, planeInArea } from "./planePhysics.js";
+import { calcMaxAngularSpeed, calcTurningRadius, turnDirection, shortestAngleDiff, planeInArea, distanceToLineAxis, timeToCrossLine, } from "./planePhysics.js";
 import { Callsign } from "./planeCallsign.js";
 
 export class Plane {
@@ -36,6 +38,7 @@ export class Plane {
   
     // turning
     this.bankAngle = 25; // degrees
+    this.forcedTurnSide = null;
     this.turnSide = 0; // 1 = clockwise, -1 = counterclockwise
 
     // speed 
@@ -66,12 +69,18 @@ export class Plane {
     this.landing = false;
     this.landed = false;
 
+    this.landingQueue = [];
+    this.sideFromCenterLine = null;
+    this.backTurnCompleted = false;
+    this.alignStarted === false;
+
     this.renderer = new PlaneRenderer(this); // подключаем новый рендерер
   }
 
   // ======= GETTERS =======
   get finalLegArea() { return getFinalLegArea(); }
   get runway() { return getRunway(); }
+  get centerLine() { return getCenterLine(); }
 
   // ======= STATIC METHODS =======
   static checkSTCA(planes) {
@@ -97,11 +106,12 @@ export class Plane {
     if (this.targetHeading !== this.heading) this.updateHeading(delta);
     if (this.targetAltitude !== this.altitude) this.updateAltitude(delta);
     if (this.targetSpeed !== this.groundSpeed) this.updateSpeed(delta);
-    if (this.landing) this.updateLanding(delta);
-    else {
-      this.updatePosition(delta);
+    if (this.landing) {
+      this.updateLanding(delta);
+    } else {
       this.checkLanding();
     }
+    this.updatePosition(delta);
   }
 
   updatePosition(delta) {
@@ -146,11 +156,12 @@ export class Plane {
     const angleDiff = shortestAngleDiff(target, heading);
     const turnRate = calcMaxAngularSpeed(this.groundSpeed, this.bankAngle);
     const turnRateDpf = turnRate * delta;
-    this.turnSide = turnDirection(target, heading);
+    this.turnSide = this.forcedTurnSide !== null ? this.forcedTurnSide : turnDirection(target, heading);
 
     if (Math.abs(angleDiff) <= turnRateDpf) {
       this.heading = this.targetHeading;
       this.turnSide = 0;
+      this.forcedTurnSide = null;
       sayReachedHeading(this);
       return;
     }
@@ -162,39 +173,155 @@ export class Plane {
   checkLanding() {
     const a = this.finalLegArea;
     const r = this.runway;
-    const isOnFinal = planeInArea(this.x, this.y, this.finalLegArea);
     const isCorrectAlt = this.altitude <= 6000;
-    const isHeadingToRw = Math.abs(this.heading - r.heading) <= 90;
+    const isOnFinal = planeInArea(this.x, this.y, this.finalLegArea);
 
-    if (!this.landing && isOnFinal && isCorrectAlt && isHeadingToRw) {
+
+    const offset = this.getCenterLineOffset();
+    const side = Math.sign(offset);
+    const isLineCrossed = (side !== this.sideFromCenterLine);
+
+    const isHeadingToRw = Math.abs(this.heading - r.heading) <= 90;
+    if (!this.landing && isOnFinal && isLineCrossed && isHeadingToRw) {
       this.landing = true;
+      this.makeBackTurn();
     }
+
+    this.sideFromCenterLine = side;
+
+
+    const [start, end] = this.centerLine;
+    const timeToCross = timeToCrossLine(this, start, end)
+    const adjustH = shortestAngleDiff(r.heading, this.heading)
+    const turnRate = calcMaxAngularSpeed(this.groundSpeed, this.bankAngle);
+    const timeToTurn = adjustH / turnRate
+    this.showLogs( this.targetHeading, offset, timeToCross, timeToTurn)
+
   }
 
   updateLanding(delta) {
     const r = this.runway;
-    const targetX = r.x + r.width / 2;
-    const targetY = r.y + r.height / 2;
+
+    this.speed = kphToPxPerSec(300);
+    this.groundSpeed = Math.floor(300);
+    this.targetSpeed = Math.floor(300);
+
+    const offset = this.getCenterLineOffset();
+    const [start, end] = this.centerLine;
+    const timeToCross = Math.abs(timeToCrossLine(this, start, end))
+
+    const adjustH = shortestAngleDiff(r.heading, this.heading)
+    const turnRate = calcMaxAngularSpeed(this.groundSpeed, this.bankAngle);
+    const timeToTurn = Math.abs(adjustH / turnRate)
+
+    const turnRadius = calcTurningRadius(this.groundSpeed, this.bankAngle) 
+
+    if (Math.abs(adjustH) <= (turnRate * delta)) {
+      this.backTurnCompleted = true;
+    }
+
+    if(Math.abs(offset) <= turnRadius && this.backTurnCompleted) {
+      this.forcedTurnSide = null;
+      this.targetHeading= r.heading;
+      // this.alignStarted = true; 
+      console.log('align')
+    }
+
+    // if(Math.abs(timeToCross - timeToTurn) < 0.1 && this.backTurnCompleted) {
+    //   this.forcedTurnSide = null;
+    //   this.targetHeading= r.heading;
+    //   this.alignStarted = true; 
+    //   console.log('align')
+    // }
+
+    if (this.alignStarted) { 
+      const kLat = 0.3;
+      const kHead = 0.7;
+      const minBank = 0;
+      const maxBank = 35;
+
+      const lateralError = offset;
+      const headingError = adjustH;
+
+      let targetBank = lateralError * kLat + headingError * kHead;
+
+      targetBank = Math.sign(targetBank) * Math.min(Math.abs(targetBank), maxBank);
+      targetBank = Math.sign(targetBank) * Math.max(Math.abs(targetBank), minBank); 
+
+      const rateLimit = 4;
+      const maxStepThisFrame = rateLimit * delta;
+      const bankDiff = targetBank - this.bankAngle;
+      this.bankAngle += Math.sign(bankDiff) * Math.min(Math.abs(bankDiff), maxStepThisFrame);
+
+      if (Math.abs(adjustH) <= (turnRate * delta)) {
+        this.alignStarted = false;
+        console.log('on final')
+      }
+    }
+
+    this.showLogs(this.targetHeading, offset, timeToCross, timeToTurn, this.backTurnCompleted, this.bankAngle, turnRadius);
+  }
+
+  makeBackTurn() {
+    const r = this.runway;
+    const targetX = r.points[0].x;
+    const targetY = r.center.y;
+
     const dx = targetX - this.x;
     const dy = targetY - this.y;
     const dist = Math.sqrt(dx*dx + dy*dy);
 
-    this.heading = (radToDeg(Math.atan2(dy, dx)) + 90 + 360) % 360;
+    this.speed = kphToPxPerSec(300);
 
-    if (dist > this.speed * delta) {
-      this.x += (dx / dist) * this.speed * delta;
-      this.y += (dy / dist) * this.speed * delta;
-    } else {
-      this.x = targetX;
-      this.y = targetY;
-      this.landed = true;
-    }
+    const adjHeading = 90;
+    const factor = 1;
+    const rvrsHeading = adjHeading * factor;
+
+    this.bankAngle = 30;
+
+    this.forcedTurnSide = turnDirection(r.heading, this.heading); // default 1, если 0
+
+    this.targetHeading = normalizeAngle(this.heading + rvrsHeading);
+
+    console.log('back turn started')
   }
+
+
+  // updateLanding(delta) {
+  //   const r = this.runway;
+  //   const targetX = r.center.x;
+  //   const targetY = r.center.y;
+  //   const dx = targetX - this.x;
+  //   const dy = targetY - this.y;
+  //   const dist = Math.sqrt(dx*dx + dy*dy);
+
+  //   this.heading = (radToDeg(Math.atan2(dy, dx)) + 90 + 360) % 360;
+
+  //   if (dist > this.speed * delta) {
+  //     this.x += (dx / dist) * this.speed * delta;
+  //     this.y += (dy / dist) * this.speed * delta;
+  //   } else {
+  //     this.x = targetX;
+  //     this.y = targetY;
+  //     this.landed = true;
+  //   }
+  // }
+
 
   getRadarResponse() {
     this.displayX = this.x;
     this.displayY = this.y;
     this.displayHeading = this.heading;
+  }
+
+  getCenterLineOffset() {
+    const [start, end] = this.centerLine;
+    return distanceToLineAxis(
+      this.x, 
+      this.y,
+      start.x, start.y,
+      end.x, end.y
+    );
   }
 
   checkRunway() {
@@ -207,6 +334,23 @@ export class Plane {
     const dy = this.y - grid.centerY;
     const exitMargin = OFFSCREEN_MARGIN + 20;
     return Math.sqrt(dx*dx + dy*dy) > grid.maxRadius + exitMargin;
+  }
+
+  showLogs(targetHeading, offset, timeToCross, timeToTurn, isNoseToLine, bankAngle, turnRadius){
+    // then remove!
+    if(this.selected) {
+      const offset = this.getCenterLineOffset();
+      const side = Math.sign(offset);
+      console.table({
+        targetHeading: (`${targetHeading} deg`),
+        offset: (`${(offset * METERS_PER_PIXEL).toFixed(2)} m`),
+        timeToCross: (`${(timeToCross).toFixed(3)} sec`),
+        timeToTurn: (`${(timeToTurn).toFixed(3)} sec`),
+        isNoseToLine: isNoseToLine,
+        bankAngle: bankAngle,
+        turnRadius: turnRadius,
+      });
+    }
   }
 
   // ======= VISUALIZATION METHODS =======

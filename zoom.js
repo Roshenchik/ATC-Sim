@@ -7,10 +7,10 @@ export const camera = {
   y: 0,
   zoom: 1,
   minZoom: 0.5,
-  maxZoom: 4,
+  maxZoom: 8,
 };
 
-export function setCameraOnObjCenter(x, y, width, height) {
+export function setCameraOnObjCenter(x, y, width = 0, height = 0) {
   camera.x = x + width / 2;
   camera.y = y + height / 2;
 }
